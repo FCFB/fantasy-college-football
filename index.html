@@ -10,6 +10,7 @@
 
 <!-- Firebase (free tier) — compat build, no bundler needed -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
 <style>
@@ -266,6 +267,42 @@
   }
   .refresh-btn:hover{color:var(--paper);border-color:var(--gold);}
 
+  /* ---------- Sort controls ---------- */
+  .sort-row{
+    display:flex; align-items:center; gap:8px;
+    margin:-4px 0 14px; font-size:13px;
+  }
+  .sort-label{color:var(--ink-soft);}
+  .sort-btn{
+    background:none; border:1px solid var(--line); border-radius:999px;
+    padding:5px 12px; font-size:12px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+  }
+  .sort-btn.active{background:var(--turf); border-color:var(--turf); color:var(--paper);}
+
+  /* ---------- Pick card layout (projected score) ---------- */
+  .pick-card{
+    display:flex; align-items:flex-start; gap:12px;
+    padding:12px 4px; border-bottom:1px solid var(--line);
+  }
+  .pick-card.disabled{opacity:0.35;}
+  .pick-card input[type=checkbox]{margin-top:4px;}
+  .pick-card-body{flex:1; min-width:0;}
+  .pick-card-top{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;}
+  .pick-card-name{font-size:15px; font-weight:600;}
+  .pick-card-rank{font-size:12px; color:var(--ink-soft);}
+  .pick-card-proj{
+    font-family:'Anton',system-ui,sans-serif;
+    font-size:22px; color:var(--turf); margin-left:auto; text-align:right; white-space:nowrap;
+  }
+  .pick-card-proj small{display:block; font-family:'Inter',sans-serif; font-size:11px; font-weight:600; color:var(--ink-soft);}
+  .pick-card-meta{font-size:12px; color:var(--ink-soft); margin-top:3px;}
+  .team-info-btn{
+    background:none; border:1px solid var(--turf); color:var(--turf);
+    border-radius:var(--radius); padding:3px 9px; font-size:11px; font-weight:700;
+    cursor:pointer; margin-top:6px;
+  }
+  .team-info-btn:hover{background:var(--turf); color:var(--paper);}
+
   /* ---------- Team Info ---------- */
   #teamInfoDetail{
     border-top:1px solid var(--line);
@@ -274,6 +311,25 @@
   }
   #teamInfoDetail h3{font-size:22px;margin-bottom:4px;}
   #teamInfoDetail h4{font-size:15px;margin:18px 0 8px;}
+  .past-game-row{
+    display:grid; grid-template-columns:40px 1fr 60px 56px 70px;
+    gap:8px; padding:10px 6px; border-bottom:1px solid var(--line);
+    font-size:14px; cursor:pointer; align-items:center;
+  }
+  .past-game-row:hover{background:#EFEBDD;}
+  .past-game-row .pts-cell{text-align:right; font-family:'Anton',system-ui,sans-serif; font-size:16px;}
+  .breakdown-panel{
+    display:none; background:#F5F3EC; border-bottom:1px solid var(--line);
+    padding:10px 16px 14px;
+  }
+  .breakdown-panel.open{display:block;}
+  .breakdown-line{
+    display:flex; justify-content:space-between; font-size:13px;
+    padding:4px 0; border-bottom:1px dashed var(--line);
+  }
+  .breakdown-line:last-child{border-bottom:none;}
+  .breakdown-total, .breakdown-final{font-weight:700;}
+  .breakdown-final{color:var(--turf); font-size:14px;}
   .sticky-bar{
     position:sticky;
     bottom:0;
@@ -384,14 +440,28 @@
 <!-- ---------------- LOGIN ---------------- -->
 <div class="login-wrap" id="loginView">
   <div class="login-card">
-    <h1>Get in the pool</h1>
-    <p>Pick a username and PIN. First time here? Using a new username creates your account automatically.</p>
+    <h1 id="loginTitle">Sign in</h1>
+    <p id="loginSubtitle">Welcome back — sign in with your email.</p>
     <div id="loginError" class="error-msg" style="display:none;"></div>
-    <label for="loginUser">Username</label>
-    <input type="text" id="loginUser" autocomplete="username" placeholder="e.g. jsmith">
-    <label for="loginPin">PIN</label>
-    <input type="password" id="loginPin" autocomplete="current-password" placeholder="4+ digits" inputmode="numeric">
-    <button class="btn btn-block" id="loginBtn">Enter</button>
+    <div id="loginNotice" class="hint" style="display:none;"></div>
+
+    <label for="loginDisplayName" id="loginDisplayNameLabel" style="display:none;">Display name</label>
+    <input type="text" id="loginDisplayName" placeholder="Shown on the leaderboard" style="display:none;">
+
+    <label for="loginEmail">Email</label>
+    <input type="email" id="loginEmail" autocomplete="email" placeholder="you@example.com">
+
+    <label for="loginPassword" id="loginPasswordLabel">Password</label>
+    <input type="password" id="loginPassword" autocomplete="current-password" placeholder="6+ characters">
+
+    <button class="btn btn-block" id="loginBtn">Sign in</button>
+
+    <p class="hint" style="text-align:center;margin-top:14px;">
+      <a id="toggleModeLink" style="cursor:pointer;text-decoration:underline;">New here? Create an account</a>
+    </p>
+    <p class="hint" style="text-align:center;">
+      <a id="forgotPasswordLink" style="cursor:pointer;text-decoration:underline;">Forgot password?</a>
+    </p>
   </div>
 </div>
 
@@ -403,7 +473,7 @@
     <p class="section-sub">Every player, every week, one list. Points are the sum of your five picks' fantasy points across all weeks played.</p>
     <div id="leaderboardWrap">
       <table class="board">
-        <thead><tr><th>#</th><th>Player</th><th>Weeks</th><th style="text-align:right;">Points</th></tr></thead>
+        <thead><tr><th>#</th><th>Player</th><th>Weeks</th><th style="text-align:right;">Last Wk</th><th style="text-align:right;">Total</th></tr></thead>
         <tbody id="leaderboardBody"></tbody>
       </table>
     </div>
@@ -412,7 +482,7 @@
   <!-- ---------------- MAKE PICKS ---------------- -->
   <section class="view" id="view-picks">
     <h2 class="section-title">Make Your Picks</h2>
-    <p class="section-sub">Choose exactly five teams for this week. Anyone can take the same team — there's no draft.</p>
+    <p class="section-sub">Choose exactly five teams for this week from who's actually playing. Anyone can take the same team — there's no draft.</p>
 
     <div class="lock-banner" id="picksLockBanner">
       <span><strong id="picksWeekLabel">Week —</strong> · picks close <span id="picksLockTime">—</span></span>
@@ -421,6 +491,11 @@
 
     <div class="search-row">
       <input type="text" id="teamSearch" placeholder="Search teams…">
+    </div>
+    <div class="sort-row">
+      <span class="sort-label">Sort by:</span>
+      <button class="sort-btn active" data-sort-target="picks" data-sort="rank">SP+ Rating</button>
+      <button class="sort-btn" data-sort-target="picks" data-sort="projected">Projected Score</button>
     </div>
 
     <div class="team-list" id="teamList"></div>
@@ -435,9 +510,14 @@
   <!-- ---------------- TEAM INFO ---------------- -->
   <section class="view" id="view-teamInfo">
     <h2 class="section-title">Team Info</h2>
-    <p class="section-sub">Pick a team to see its past results, average fantasy points per week, and upcoming schedule.</p>
+    <p class="section-sub">Pick a team to see its past results (click any game for a stat-by-stat breakdown), projected score, and upcoming schedule.</p>
     <div class="search-row">
       <input type="text" id="teamInfoSearch" placeholder="Search teams…">
+    </div>
+    <div class="sort-row">
+      <span class="sort-label">Sort by:</span>
+      <button class="sort-btn active" data-sort-target="teamInfo" data-sort="rank">SP+ Rating</button>
+      <button class="sort-btn" data-sort-target="teamInfo" data-sort="projected">Projected Score</button>
     </div>
     <div class="team-list" id="teamInfoList"></div>
     <div id="teamInfoDetail" style="display:none;"></div>
@@ -509,10 +589,12 @@ const firebaseConfig = {
 };
 
 let db = null;
+let auth = null;
 const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY";
 if (isConfigured) {
   firebase.initializeApp(firebaseConfig);
   db = firebase.firestore();
+  auth = firebase.auth();
 } else {
   document.getElementById('setupBanner').style.display = 'block';
 }
@@ -563,71 +645,145 @@ const TEAM_NAMES_LC = new Map(TEAMS.map(t => [t.name.toLowerCase(), t.name]));
 /* =========================================================================
    3. STATE
    ========================================================================= */
+const ADMIN_DISPLAY_NAME = "brainner"; // only this (lowercase) display name sees Admin / Refresh data
+const OPPONENT_ADJUSTMENT_FACTOR = 0.25; // must match the Apps Script's WEIGHTS/formula
+let loginMode = 'signin'; // 'signin' | 'create'
+
 let currentUser = null;      // { username, displayName }
 let appConfig = { currentWeek: 1, lockTime: null, adminPin: null };
 let selectedTeams = new Set();
 let isAdminUnlocked = false;
+let picksSortMode = 'rank';     // 'rank' | 'projected' — Make Picks list order
+let teamInfoSortMode = 'rank';  // 'rank' | 'projected' — Team Info list order
 
 // Caches populated from Firestore, refreshed on login and via the Refresh button
-let teamScoresCache = {};   // { "3": { "Ohio State": 72.68, ... }, ... }
-let scheduleCache = [];     // [{ week, team, opponent, opponentRank, home, completed }, ...]
-let teamRanksCache = {};    // { "Ohio State": 1, ... } — live ranks synced from the Sheet
+let teamScoresCache = {};     // { "3": { "Ohio State": 72.68, ... }, ... }
+let teamBreakdownCache = {};  // { "3": { "Ohio State": {passYards: 12.4, ..., final: 72.68}, ... } }
+let scheduleCache = [];       // [{ week, team, opponent, opponentRank, home, completed }, ...]
+let teamRanksCache = {};      // { "Ohio State": 1, ... } — live ranks synced from CFBD
+
+const STAT_LABELS = {
+  passYards: 'Passing Yards', passTD: 'Passing TD', passInt: 'Passing INT',
+  rushYards: 'Rushing Yards', rushTD: 'Rushing TD', fumbleLost: 'Fumbles Lost',
+  sack: 'Sacks', defInt: 'Interceptions (D)', fumbleRecovered: 'Fumbles Recovered',
+  safety: 'Safeties', defTD: 'Defensive TD', returnTD: 'Return TD',
+  pat: 'PATs Made', fieldGoals: 'Field Goals', pointsAllowed: 'Points Allowed'
+};
 
 /* =========================================================================
-   4. LOGIN / SESSION
+   4. LOGIN / SESSION — real Firebase email/password auth
    ========================================================================= */
-function normalizeUsername(u){ return u.trim().toLowerCase(); }
+function friendlyAuthError(e){
+  switch (e.code){
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Incorrect email or password.';
+    case 'auth/email-already-in-use':
+      return 'An account with that email already exists — sign in instead.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
+    case 'auth/invalid-email':
+      return "That doesn't look like a valid email address.";
+    case 'auth/missing-password':
+      return 'Enter a password.';
+    default:
+      return e.message || 'Something went wrong. Try again.';
+  }
+}
+function setLoginMode(mode){
+  loginMode = mode;
+  const isCreate = mode === 'create';
+  document.getElementById('loginTitle').textContent = isCreate ? 'Create your account' : 'Sign in';
+  document.getElementById('loginSubtitle').textContent = isCreate
+    ? "You'll use this to sign in from now on."
+    : 'Welcome back — sign in with your email.';
+  document.getElementById('loginDisplayNameLabel').style.display = isCreate ? 'block' : 'none';
+  document.getElementById('loginDisplayName').style.display = isCreate ? 'block' : 'none';
+  document.getElementById('loginPasswordLabel').textContent = isCreate ? 'Password (6+ characters)' : 'Password';
+  document.getElementById('loginBtn').textContent = isCreate ? 'Create account' : 'Sign in';
+  document.getElementById('toggleModeLink').textContent = isCreate ? 'Already have an account? Sign in' : 'New here? Create an account';
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginNotice').style.display = 'none';
+}
+document.getElementById('toggleModeLink').addEventListener('click', () => setLoginMode(loginMode === 'create' ? 'signin' : 'create'));
 
-async function handleLogin(){
-  const rawUser = document.getElementById('loginUser').value;
-  const pin = document.getElementById('loginPin').value;
+document.getElementById('forgotPasswordLink').addEventListener('click', async () => {
   const errBox = document.getElementById('loginError');
-  errBox.style.display = 'none';
-
-  const uname = normalizeUsername(rawUser);
-  if (!uname || !pin){
-    errBox.textContent = 'Enter a username and PIN.';
+  const notice = document.getElementById('loginNotice');
+  errBox.style.display = 'none'; notice.style.display = 'none';
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email){
+    errBox.textContent = 'Enter your email above first, then click "Forgot password?".';
     errBox.style.display = 'block';
     return;
   }
-  try{
-    const ref = db.collection('users').doc(uname);
-    const doc = await ref.get();
-    if (doc.exists){
-      if (doc.data().pin !== pin){
-        errBox.textContent = 'Incorrect PIN for that username.';
+  try {
+    await auth.sendPasswordResetEmail(email);
+    notice.textContent = `Password reset email sent to ${email} — check your inbox (and spam folder).`;
+    notice.style.display = 'block';
+  } catch (e) {
+    errBox.textContent = friendlyAuthError(e);
+    errBox.style.display = 'block';
+  }
+});
+
+async function handleLogin(){
+  const errBox = document.getElementById('loginError');
+  errBox.style.display = 'none';
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+
+  if (!email || !password){
+    errBox.textContent = 'Enter your email and password.';
+    errBox.style.display = 'block';
+    return;
+  }
+
+  try {
+    if (loginMode === 'create'){
+      const displayName = document.getElementById('loginDisplayName').value.trim();
+      if (!displayName){
+        errBox.textContent = 'Enter a display name — it\'s what shows on the leaderboard.';
         errBox.style.display = 'block';
         return;
       }
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      await cred.user.updateProfile({ displayName });
+      await db.collection('users').doc(cred.user.uid).set({
+        email, displayName, createdAt: new Date().toISOString()
+      });
+      // onAuthStateChanged fires from here and calls enterApp()
     } else {
-      await ref.set({ pin: pin, displayName: rawUser.trim(), createdAt: new Date().toISOString() });
+      await auth.signInWithEmailAndPassword(email, password);
+      // onAuthStateChanged fires from here and calls enterApp()
     }
-    currentUser = { username: uname, displayName: doc.exists ? doc.data().displayName : rawUser.trim() };
-    localStorage.setItem('fcf_username', uname);
-    enterApp();
-  } catch(e){
-    errBox.textContent = 'Something went wrong talking to the database. Check your Firebase setup.';
+  } catch (e) {
+    errBox.textContent = friendlyAuthError(e);
     errBox.style.display = 'block';
     console.error(e);
   }
 }
 
-async function tryResumeSession(){
-  const saved = localStorage.getItem('fcf_username');
-  if (!saved || !db) return;
-  const doc = await db.collection('users').doc(saved).get();
-  if (doc.exists){
-    currentUser = { username: saved, displayName: doc.data().displayName || saved };
-    enterApp();
+auth && auth.onAuthStateChanged(async (user) => {
+  if (!user){
+    currentUser = null;
+    document.getElementById('appHeader').style.display = 'none';
+    document.getElementById('appMain').style.display = 'none';
+    document.getElementById('loginView').style.display = 'block';
+    return;
   }
-}
+  let displayName = user.displayName;
+  try {
+    const doc = await db.collection('users').doc(user.uid).get();
+    if (doc.exists && doc.data().displayName) displayName = doc.data().displayName;
+  } catch (e) { console.error('Could not load user profile:', e); }
+  currentUser = { uid: user.uid, email: user.email, displayName: displayName || user.email };
+  enterApp();
+});
 
 function logout(){
-  currentUser = null;
-  localStorage.removeItem('fcf_username');
-  document.getElementById('appHeader').style.display = 'none';
-  document.getElementById('appMain').style.display = 'none';
-  document.getElementById('loginView').style.display = 'block';
+  auth.signOut();
 }
 
 async function enterApp(){
@@ -635,6 +791,11 @@ async function enterApp(){
   document.getElementById('appHeader').style.display = 'block';
   document.getElementById('appMain').style.display = 'block';
   document.getElementById('whoAmI').textContent = currentUser.displayName;
+
+  const isAdmin = (currentUser.displayName || '').trim().toLowerCase() === ADMIN_DISPLAY_NAME;
+  document.querySelector('[data-view="admin"]').style.display = isAdmin ? '' : 'none';
+  document.getElementById('refreshBtn').style.display = isAdmin ? '' : 'none';
+
   try {
     await loadConfig();
     await Promise.all([loadTeamScores(), loadSchedule(), loadTeamRanks()]);
@@ -657,9 +818,13 @@ async function enterApp(){
 async function loadTeamScores(force){
   if (Object.keys(teamScoresCache).length && !force) return teamScoresCache;
   const snap = await db.collection('teamScores').get();
-  const map = {};
-  snap.forEach(d => map[d.id] = d.data().teams || {});
+  const map = {}, breakdownMap = {};
+  snap.forEach(d => {
+    map[d.id] = d.data().teams || {};
+    breakdownMap[d.id] = d.data().breakdown || {};
+  });
   teamScoresCache = map;
+  teamBreakdownCache = breakdownMap;
   return map;
 }
 async function loadSchedule(force){
@@ -681,26 +846,66 @@ function teamRank(team){
   const t = TEAMS.find(x => x.name === team);
   return t ? t.rank : null;
 }
-function teamAvgPoints(team){
-  let sum = 0, n = 0;
-  Object.values(teamScoresCache).forEach(weekObj => {
-    if (typeof weekObj[team] === 'number'){ sum += weekObj[team]; n++; }
-  });
-  return n ? sum / n : null;
-}
 function teamNextOpponent(team){
   return scheduleCache
     .filter(s => s.team === team && !s.completed)
     .sort((a,b) => a.week - b.week)[0] || null;
 }
+function currentWeekEntry(team){
+  return scheduleCache.find(s => s.team === team && s.week === appConfig.currentWeek) || null;
+}
+function teamPlayingThisWeek(team){
+  return scheduleCache.some(s => s.team === team && s.week === appConfig.currentWeek);
+}
+function computeMultiplierClient(ownRank, opponentRank){
+  const rankCount = Object.keys(teamRanksCache).length || TEAMS.length;
+  const rankSpread = rankCount - 1;
+  if (typeof ownRank !== 'number' || typeof opponentRank !== 'number' || !rankSpread) return 1;
+  const gapAbs = Math.abs(opponentRank - ownRank) / rankSpread;
+  return ownRank <= opponentRank
+    ? 1 - OPPONENT_ADJUSTMENT_FACTOR * gapAbs
+    : 1 + OPPONENT_ADJUSTMENT_FACTOR * gapAbs;
+}
+// Recency-weighted base score: most recent game = weight 5, then 4, 3, 2,
+// and everything older than the 4th-most-recent game = weight 1.
+function projectedBaseScore(team){
+  const weeks = Object.keys(teamScoresCache).map(Number)
+    .filter(w => typeof teamScoresCache[w][team] === 'number')
+    .sort((a,b) => b - a); // most recent first
+  if (!weeks.length) return null;
+  const weightForIndex = i => (i === 0 ? 5 : i === 1 ? 4 : i === 2 ? 3 : i === 3 ? 2 : 1);
+  let weightedSum = 0, weightTotal = 0;
+  weeks.forEach((w, i) => {
+    const wt = weightForIndex(i);
+    weightedSum += teamScoresCache[w][team] * wt;
+    weightTotal += wt;
+  });
+  return weightedSum / weightTotal;
+}
+// { base, multiplier, projected, opponentEntry } for this week's matchup, or null with no history.
+function projectedScoreFor(team){
+  const base = projectedBaseScore(team);
+  if (base == null) return null;
+  const entry = currentWeekEntry(team);
+  const multiplier = entry ? computeMultiplierClient(teamRank(team), entry.opponentRank) : 1;
+  return { base, multiplier, projected: base * multiplier, opponentEntry: entry };
+}
 function teamMetaLine(team){
-  const avg = teamAvgPoints(team);
-  const avgText = avg != null ? `${avg.toFixed(1)} pt/wk avg` : 'No games scored yet';
-  const next = teamNextOpponent(team);
-  const nextText = next
-    ? `Next: ${next.home ? 'vs' : '@'} ${next.opponent}${typeof next.opponentRank === 'number' ? ' (#'+next.opponentRank+')' : ''}`
-    : 'No upcoming game scheduled';
-  return `${avgText} · ${nextText}`;
+  const entry = currentWeekEntry(team);
+  if (!entry) return 'No game this week';
+  const oppText = `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (#'+entry.opponentRank+')' : ''}`;
+  const mult = computeMultiplierClient(teamRank(team), entry.opponentRank);
+  return `${oppText} · ×${mult.toFixed(2)}`;
+}
+function goToTeamInfo(team){
+  document.querySelectorAll('nav.tabs button[data-view]').forEach(b => b.classList.remove('active'));
+  const tab = document.querySelector('[data-view="teamInfo"]');
+  if (tab) tab.classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-teamInfo').classList.add('active');
+  document.getElementById('teamInfoSearch').value = '';
+  renderTeamInfoList('');
+  showTeamDetail(team);
 }
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   const btn = document.getElementById('refreshBtn');
@@ -807,25 +1012,61 @@ document.getElementById('loginBtn').addEventListener('click', handleLogin);
 /* =========================================================================
    7. MAKE PICKS
    ========================================================================= */
+function sortedTeams(list, mode){
+  const copy = list.slice();
+  if (mode === 'projected'){
+    copy.sort((a,b) => {
+      const pa = projectedScoreFor(a.name), pb = projectedScoreFor(b.name);
+      const va = pa ? pa.projected : -Infinity, vb = pb ? pb.projected : -Infinity;
+      return vb - va;
+    });
+  } else {
+    copy.sort((a,b) => (teamRank(a.name) ?? a.rank) - (teamRank(b.name) ?? b.rank));
+  }
+  return copy;
+}
 function renderTeamList(filter){
   const wrap = document.getElementById('teamList');
   wrap.innerHTML = '';
   const f = (filter || '').toLowerCase();
-  TEAMS.filter(t => t.name.toLowerCase().includes(f)).forEach(t => {
-    const row = document.createElement('label');
-    row.className = 'team-row' + (selectedTeams.has(t.name) ? ' checked' : '');
+  const eligible = TEAMS.filter(t => teamPlayingThisWeek(t.name) && t.name.toLowerCase().includes(f));
+
+  if (!TEAMS.some(t => teamPlayingThisWeek(t.name))){
+    wrap.innerHTML = `<div class="empty-state">No schedule synced for Week ${appConfig.currentWeek} yet — check back once the sync has run for this week.</div>`;
+    return;
+  }
+
+  sortedTeams(eligible, picksSortMode).forEach(t => {
+    const entry = currentWeekEntry(t.name);
+    const proj = projectedScoreFor(t.name);
+    const mult = entry ? computeMultiplierClient(teamRank(t.name), entry.opponentRank) : 1;
+    const oppText = entry
+      ? `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (#'+entry.opponentRank+')' : ''}`
+      : 'No game this week';
+
+    const row = document.createElement('div');
+    row.className = 'pick-card team-row' + (selectedTeams.has(t.name) ? ' checked' : '');
     row.innerHTML = `
       <input type="checkbox" ${selectedTeams.has(t.name) ? 'checked' : ''} data-team="${t.name}">
-      <span class="team-rank">#${teamRank(t.name) ?? t.rank}</span>
-      <span class="team-name-col">
-        <span class="team-name-main">${t.name}</span>
-        <span class="team-meta">${teamMetaLine(t.name)}</span>
-      </span>
+      <div class="pick-card-body">
+        <div class="pick-card-top">
+          <span class="pick-card-rank">#${teamRank(t.name) ?? t.rank}</span>
+          <span class="pick-card-name">${t.name}</span>
+          <span class="pick-card-proj">${proj ? proj.projected.toFixed(1) : '—'}<small>projected</small></span>
+        </div>
+        <div class="pick-card-meta">${oppText} · ×${mult.toFixed(2)} multiplier${proj ? ` · base ${proj.base.toFixed(1)}` : ''}</div>
+        <button type="button" class="team-info-btn" data-team="${t.name}">Team Info →</button>
+      </div>
     `;
+    row.querySelector('input').addEventListener('change', (e) => onTeamToggle(t.name, e.target.checked));
+    row.querySelector('.team-info-btn').addEventListener('click', (e) => { e.stopPropagation(); goToTeamInfo(t.name); });
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.team-info-btn') || e.target.tagName === 'INPUT') return;
+      const cb = row.querySelector('input');
+      cb.checked = !cb.checked;
+      onTeamToggle(t.name, cb.checked);
+    });
     wrap.appendChild(row);
-  });
-  wrap.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', () => onTeamToggle(cb.dataset.team, cb.checked));
   });
   updateCountBadge();
   setPicksInteractive(!isLocked());
@@ -849,6 +1090,22 @@ function updateCountBadge(){
 }
 document.getElementById('teamSearch').addEventListener('input', (e) => renderTeamList(e.target.value));
 
+document.querySelectorAll('.sort-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.sortTarget;
+    const mode = btn.dataset.sort;
+    document.querySelectorAll(`.sort-btn[data-sort-target="${target}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (target === 'picks'){
+      picksSortMode = mode;
+      renderTeamList(document.getElementById('teamSearch').value);
+    } else {
+      teamInfoSortMode = mode;
+      renderTeamInfoList(document.getElementById('teamInfoSearch').value);
+    }
+  });
+});
+
 document.getElementById('submitPicksBtn').addEventListener('click', async () => {
   const msg = document.getElementById('picksSubmitMsg');
   if (selectedTeams.size !== 5){
@@ -862,10 +1119,10 @@ document.getElementById('submitPicksBtn').addEventListener('click', async () => 
     return;
   }
   const week = appConfig.currentWeek;
-  const docId = `${week}__${currentUser.username}`;
+  const docId = `${week}__${currentUser.uid}`;
   try{
     await db.collection('picks').doc(docId).set({
-      week, username: currentUser.username, displayName: currentUser.displayName,
+      week, uid: currentUser.uid, displayName: currentUser.displayName,
       teams: Array.from(selectedTeams), submittedAt: new Date().toISOString()
     });
     msg.textContent = `Saved! Your 5 picks for Week ${week} are locked in.`;
@@ -883,7 +1140,7 @@ document.getElementById('submitPicksBtn').addEventListener('click', async () => 
 async function renderMyPicks(){
   const wrap = document.getElementById('myPicksWrap');
   wrap.innerHTML = 'Loading…';
-  const snap = await db.collection('picks').where('username','==',currentUser.username).get();
+  const snap = await db.collection('picks').where('uid','==',currentUser.uid).get();
   if (snap.empty){
     wrap.innerHTML = `<div class="empty-state">You haven't made any picks yet. <a data-go="picks">Make your first five</a>.</div>`;
     wrap.querySelector('[data-go]').addEventListener('click', () => document.querySelector('[data-view=picks]').click());
@@ -897,15 +1154,25 @@ async function renderMyPicks(){
 
   wrap.innerHTML = weeks.map(w => {
     const scores = teamScoresCache[String(w.week)] || {};
+    const anyScored = w.teams.some(t => typeof scores[t] === 'number');
+    const isCurrentUnscored = !anyScored && w.week === appConfig.currentWeek;
+
     let total = 0;
     const chips = w.teams.map(t => {
-      const pts = scores[t];
+      let pts = scores[t];
+      let isProj = false;
+      if (typeof pts !== 'number' && isCurrentUnscored){
+        const proj = projectedScoreFor(t);
+        if (proj){ pts = proj.projected; isProj = true; }
+      }
       if (typeof pts === 'number') total += pts;
-      return `<span class="team-chip">${t} <b>${typeof pts === 'number' ? pts.toFixed(2) : '—'}</b></span>`;
+      return `<span class="team-chip">${t} <b>${typeof pts === 'number' ? pts.toFixed(2) : '—'}${isProj ? '*' : ''}</b></span>`;
     }).join('');
+    const label = isCurrentUnscored ? `Week ${w.week} — ${total.toFixed(2)} pts projected*` : `Week ${w.week} — ${total.toFixed(2)} pts`;
     return `<div class="week-group">
-      <h3>Week ${w.week} — ${total.toFixed(2)} pts</h3>
+      <h3>${label}</h3>
       <div class="team-chip-row">${chips}</div>
+      ${isCurrentUnscored ? '<p class="hint">*Projected — this week hasn\'t been scored yet.</p>' : ''}
     </div>`;
   }).join('');
 }
@@ -917,13 +1184,15 @@ function renderTeamInfoList(filter){
   const wrap = document.getElementById('teamInfoList');
   wrap.innerHTML = '';
   const f = (filter || '').toLowerCase();
-  TEAMS.filter(t => t.name.toLowerCase().includes(f)).forEach(t => {
+  const filtered = TEAMS.filter(t => t.name.toLowerCase().includes(f));
+  sortedTeams(filtered, teamInfoSortMode).forEach(t => {
+    const proj = projectedScoreFor(t.name);
     const row = document.createElement('div');
     row.className = 'team-row';
     row.innerHTML = `
       <span class="team-rank">#${teamRank(t.name) ?? t.rank}</span>
       <span class="team-name-col">
-        <span class="team-name-main">${t.name}</span>
+        <span class="team-name-main">${t.name}${proj ? ` <span style="color:var(--turf);font-weight:400;">— ${proj.projected.toFixed(1)} proj</span>` : ''}</span>
         <span class="team-meta">${teamMetaLine(t.name)}</span>
       </span>
     `;
@@ -936,34 +1205,76 @@ document.getElementById('teamInfoSearch').addEventListener('input', (e) => rende
 function showTeamDetail(team){
   const box = document.getElementById('teamInfoDetail');
   const rank = teamRank(team);
-  const avg = teamAvgPoints(team);
+  const proj = projectedScoreFor(team);
   const past = scheduleCache.filter(s => s.team === team && s.completed).sort((a,b) => a.week - b.week);
   const upcoming = scheduleCache.filter(s => s.team === team && !s.completed).sort((a,b) => a.week - b.week);
 
   box.style.display = 'block';
   box.innerHTML = `
     <h3>${team}${rank ? ' · #' + rank : ''}</h3>
-    <p class="section-sub">${avg != null ? avg.toFixed(2) + ' avg fantasy pts/week across ' + past.length + ' game(s) played' : 'No completed, scored games yet.'}</p>
-    <h4>Past games</h4>
-    ${past.length ? renderScheduleTable(past, true, team) : '<p class="hint">None yet.</p>'}
+    <p class="section-sub">${proj != null
+      ? `Projected this week: <strong>${proj.projected.toFixed(2)}</strong> (base ${proj.base.toFixed(2)} × ${proj.multiplier.toFixed(2)} multiplier) — recency-weighted across ${past.length} game(s) played`
+      : 'No completed, scored games yet.'}</p>
+    <h4>Past games <span class="hint">(click a game for the stat breakdown)</span></h4>
+    <div id="pastGamesWrap">${past.length ? renderPastGames(past, team) : '<p class="hint">None yet.</p>'}</div>
     <h4>Upcoming</h4>
-    ${upcoming.length ? renderScheduleTable(upcoming, false, team) : '<p class="hint">Nothing scheduled — check back after the Sheet syncs.</p>'}
+    ${upcoming.length ? renderScheduleTable(upcoming) : '<p class="hint">Nothing scheduled — check back after the next sync.</p>'}
   `;
+  if (past.length) wirePastGameClicks(team);
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-function renderScheduleTable(rows, showPoints, team){
+function renderPastGames(rows, team){
+  return rows.map(r => {
+    const pts = (teamScoresCache[String(r.week)] || {})[team];
+    return `
+      <div class="past-game-row" data-week="${r.week}">
+        <span>Wk ${r.week}</span>
+        <span>${r.opponent}</span>
+        <span>${typeof r.opponentRank === 'number' ? '#' + r.opponentRank : '—'}</span>
+        <span>${r.home ? 'Home' : 'Away'}</span>
+        <span class="pts-cell">${typeof pts === 'number' ? pts.toFixed(2) : '—'}</span>
+      </div>
+      <div class="breakdown-panel" id="breakdown-${r.week}"></div>
+    `;
+  }).join('');
+}
+function wirePastGameClicks(team){
+  document.querySelectorAll('#pastGamesWrap .past-game-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const week = row.dataset.week;
+      const panel = document.getElementById('breakdown-' + week);
+      const isOpen = panel.classList.contains('open');
+      document.querySelectorAll('#pastGamesWrap .breakdown-panel.open').forEach(p => p.classList.remove('open'));
+      if (!isOpen){
+        panel.innerHTML = renderBreakdown(team, week);
+        panel.classList.add('open');
+      }
+    });
+  });
+}
+function renderBreakdown(team, week){
+  const bd = (teamBreakdownCache[String(week)] || {})[team];
+  if (!bd) return '<p class="hint">No stat breakdown saved for this game.</p>';
+  const lines = Object.keys(STAT_LABELS)
+    .filter(key => key in bd)
+    .map(key => `<div class="breakdown-line"><span>${STAT_LABELS[key]}</span><span>${bd[key] >= 0 ? '+' : ''}${bd[key].toFixed(2)}</span></div>`)
+    .join('');
+  return `<div class="breakdown-box">
+    ${lines}
+    <div class="breakdown-line breakdown-total"><span>Raw total</span><span>${(bd.rawTotal ?? 0).toFixed(2)}</span></div>
+    <div class="breakdown-line"><span>Opponent multiplier</span><span>×${(bd.multiplier ?? 1).toFixed(3)}</span></div>
+    <div class="breakdown-line breakdown-final"><span>Final score</span><span>${(bd.final ?? 0).toFixed(2)}</span></div>
+  </div>`;
+}
+function renderScheduleTable(rows){
   return `<table class="board"><thead><tr>
-      <th>Wk</th><th>Opponent</th><th>Opp #</th><th>H/A</th>${showPoints ? '<th style="text-align:right;">Pts</th>' : ''}
-    </tr></thead><tbody>${rows.map(r => {
-      const pts = showPoints ? (teamScoresCache[String(r.week)] || {})[team] : null;
-      return `<tr>
+      <th>Wk</th><th>Opponent</th><th>Opp #</th><th>H/A</th>
+    </tr></thead><tbody>${rows.map(r => `<tr>
         <td>${r.week}</td>
         <td>${r.opponent}</td>
         <td>${typeof r.opponentRank === 'number' ? '#' + r.opponentRank : '—'}</td>
         <td>${r.home ? 'Home' : 'Away'}</td>
-        ${showPoints ? `<td class="pts-cell">${typeof pts === 'number' ? pts.toFixed(2) : '—'}</td>` : ''}
-      </tr>`;
-    }).join('')}</tbody></table>`;
+      </tr>`).join('')}</tbody></table>`;
 }
 
 /* =========================================================================
@@ -971,7 +1282,7 @@ function renderScheduleTable(rows, showPoints, team){
    ========================================================================= */
 async function renderLeaderboard(){
   const body = document.getElementById('leaderboardBody');
-  body.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
 
   const [picksSnap] = await Promise.all([
     db.collection('picks').get(),
@@ -979,30 +1290,40 @@ async function renderLeaderboard(){
   ]);
   const scoresByWeek = teamScoresCache;
 
-  const totals = {}; // username -> { displayName, total, weeks: Set }
+  // "Last week" = the most recent week that actually has scores in it.
+  const scoredWeeks = Object.keys(scoresByWeek)
+    .map(Number)
+    .filter(w => Object.keys(scoresByWeek[w] || {}).length > 0);
+  const lastWeek = scoredWeeks.length ? Math.max(...scoredWeeks) : null;
+
+  const totals = {}; // uid -> { displayName, total, lastWeekPts, weeks: Set }
   picksSnap.forEach(d => {
     const p = d.data();
     const scores = scoresByWeek[String(p.week)] || {};
     const weekTotal = p.teams.reduce((sum,t) => sum + (typeof scores[t] === 'number' ? scores[t] : 0), 0);
-    if (!totals[p.username]) totals[p.username] = { displayName: p.displayName || p.username, total: 0, weeks: new Set() };
-    totals[p.username].total += weekTotal;
-    totals[p.username].weeks.add(p.week);
+    if (!totals[p.uid]) totals[p.uid] = { displayName: p.displayName || 'Player', total: 0, lastWeekPts: null, weeks: new Set() };
+    totals[p.uid].total += weekTotal;
+    totals[p.uid].weeks.add(p.week);
+    if (lastWeek !== null && p.week === lastWeek){
+      totals[p.uid].lastWeekPts = weekTotal;
+    }
   });
 
   const rows = Object.entries(totals)
-    .map(([username, v]) => ({ username, ...v }))
+    .map(([uid, v]) => ({ uid, ...v }))
     .sort((a,b) => b.total - a.total);
 
   if (rows.length === 0){
-    body.innerHTML = '<tr><td colspan="4"><div class="empty-state">No picks have been scored yet. Once the admin enters team points for a week, players will show up here.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="5"><div class="empty-state">No picks have been scored yet. Once a week is synced, players will show up here.</div></td></tr>';
     return;
   }
 
   body.innerHTML = rows.map((r,i) => `
-    <tr class="${r.username === currentUser.username ? 'me' : ''}">
+    <tr class="${r.uid === currentUser.uid ? 'me' : ''}">
       <td class="rank-num ${i<3?'top3':''}">${i+1}</td>
       <td>${r.displayName}</td>
       <td class="weeks-played">${r.weeks.size}</td>
+      <td class="pts-cell">${r.lastWeekPts != null ? r.lastWeekPts.toFixed(2) : '—'}</td>
       <td class="pts-cell"><span class="pts">${r.total.toFixed(2)}</span></td>
     </tr>
   `).join('');
@@ -1094,7 +1415,9 @@ document.getElementById('saveScoresBtn').addEventListener('click', async () => {
 /* =========================================================================
    11. BOOT
    ========================================================================= */
-if (isConfigured) tryResumeSession();
+// Nothing to do here — auth.onAuthStateChanged (registered in section 4) fires
+// automatically on page load with whatever session Firebase already has
+// persisted, and shows the login view itself if there isn't one.
 </script>
 </body>
 </html>
