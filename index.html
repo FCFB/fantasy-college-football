@@ -647,6 +647,7 @@ const TEAM_NAMES_LC = new Map(TEAMS.map(t => [t.name.toLowerCase(), t.name]));
    ========================================================================= */
 const ADMIN_DISPLAY_NAME = "brainner"; // only this (lowercase) display name sees Admin / Refresh data
 const OPPONENT_ADJUSTMENT_FACTOR = 0.25; // must match the Apps Script's WEIGHTS/formula
+const UNRANKED_OPPONENT_MULTIPLIER = 1 - OPPONENT_ADJUSTMENT_FACTOR; // flat discount vs FCS/D2 opponents — must match the backend
 let loginMode = 'signin'; // 'signin' | 'create'
 
 let currentUser = null;      // { username, displayName }
@@ -861,15 +862,18 @@ function teamPlayingThisWeek(team){
 // below the worst actual FBS team — must match computeOpponentMultiplier in
 // cfbd-to-firestore.gs, since this is the live/unscored-week version of the
 // same formula the backend already applied to scored weeks.
+// Must match computeOpponentMultiplier in cfbd-to-firestore.gs exactly — this
+// is the live/projected-week version of the same formula the backend applies
+// to already-scored weeks.
 function computeMultiplierClient(ownRank, opponentRank){
+  if (typeof opponentRank !== 'number'){
+    return typeof ownRank === 'number' ? UNRANKED_OPPONENT_MULTIPLIER : 1;
+  }
   const rankCount = Object.keys(teamRanksCache).length || TEAMS.length;
   const rankSpread = rankCount - 1;
-  if (!rankSpread) return 1;
-  const unrankedFallback = rankSpread + 2;
-  const effOwnRank = typeof ownRank === 'number' ? ownRank : unrankedFallback;
-  const effOpponentRank = typeof opponentRank === 'number' ? opponentRank : unrankedFallback;
-  const gapAbs = Math.abs(effOpponentRank - effOwnRank) / rankSpread;
-  return effOwnRank <= effOpponentRank
+  if (typeof ownRank !== 'number' || !rankSpread) return 1;
+  const gapAbs = Math.abs(opponentRank - ownRank) / rankSpread;
+  return ownRank <= opponentRank
     ? 1 - OPPONENT_ADJUSTMENT_FACTOR * gapAbs
     : 1 + OPPONENT_ADJUSTMENT_FACTOR * gapAbs;
 }
