@@ -391,9 +391,18 @@
   /* ---------- My picks / history ---------- */
   .week-group{
     border-bottom:1px solid var(--line);
-    padding:20px 0;
+    padding:0;
   }
-  .week-group-label{font-size:13px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; margin-bottom:10px;}
+  .week-toggle{
+    width:100%; display:flex; align-items:center; gap:10px;
+    background:none; border:none; padding:16px 4px; cursor:pointer; text-align:left;
+  }
+  .week-toggle-label{font-size:13px; font-weight:700; color:var(--ink); text-transform:uppercase; letter-spacing:0.03em;}
+  .week-toggle-total{margin-left:auto; font-size:14px; font-weight:600; color:var(--ink-soft);}
+  .week-toggle.open .week-toggle-total{color:var(--turf);}
+  .week-toggle-arrow{color:var(--ink-soft); font-size:12px; width:14px;}
+  .week-panel{display:none; padding:0 4px 18px;}
+  .week-panel.open{display:block;}
   .weekly-total-banner{
     background:var(--ink); color:var(--paper);
     border-radius:var(--radius); padding:16px 20px;
@@ -1280,7 +1289,7 @@ async function renderMyPicks(){
 
   await loadTeamScores();
 
-  wrap.innerHTML = weeks.map(w => {
+  const weekData = weeks.map(w => {
     const scores = teamScoresCache[String(w.week)] || {};
     const breakdowns = teamBreakdownCache[String(w.week)] || {};
     const anyScored = w.teams.some(t => typeof scores[t] === 'number');
@@ -1311,19 +1320,43 @@ async function renderMyPicks(){
       </tr>`;
     }).join('');
 
-    return `<div class="week-group">
-      <div class="week-group-label">Week ${w.week}${w.week === appConfig.currentWeek ? ' (current)' : ''}</div>
-      <div class="weekly-total-banner ${anyScored ? 'scored' : ''}">
-        <span class="weekly-total-label">${isCurrentUnscored ? 'PROJECTED WEEKLY TOTAL' : 'WEEKLY TOTAL'}</span>
-        <span class="weekly-total-value">${total.toFixed(1)}</span>
+    return { week: w.week, isCurrentUnscored, anyScored, total, rows };
+  });
+
+  // Most recent week (current, or the last scored one) starts open; every
+  // past week starts collapsed — click its header row to expand it.
+  wrap.innerHTML = weekData.map((wd, i) => {
+    const openByDefault = i === 0;
+    return `
+    <div class="week-group">
+      <button type="button" class="week-toggle${openByDefault ? ' open' : ''}" data-week="${wd.week}">
+        <span class="week-toggle-label">Week ${wd.week}${wd.week === appConfig.currentWeek ? ' (current)' : ''}</span>
+        <span class="week-toggle-total">${wd.isCurrentUnscored ? 'Proj ' : ''}${wd.total.toFixed(1)} pts</span>
+        <span class="week-toggle-arrow">${openByDefault ? '▾' : '▸'}</span>
+      </button>
+      <div class="week-panel${openByDefault ? ' open' : ''}" id="week-panel-${wd.week}">
+        <div class="weekly-total-banner ${wd.anyScored ? 'scored' : ''}">
+          <span class="weekly-total-label">${wd.isCurrentUnscored ? 'PROJECTED WEEKLY TOTAL' : 'WEEKLY TOTAL'}</span>
+          <span class="weekly-total-value">${wd.total.toFixed(1)}</span>
+        </div>
+        <table class="my-picks-table">
+          <thead><tr><th>Team</th><th>Opponent</th><th>Mult</th><th>${wd.isCurrentUnscored ? 'Proj' : 'Score'}</th></tr></thead>
+          <tbody>${wd.rows}</tbody>
+        </table>
+        ${wd.isCurrentUnscored ? '<p class="hint">*Projected — this week hasn\'t been scored yet.</p>' : ''}
       </div>
-      <table class="my-picks-table">
-        <thead><tr><th>Team</th><th>Opponent</th><th>Mult</th><th>${isCurrentUnscored ? 'Proj' : 'Score'}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      ${isCurrentUnscored ? '<p class="hint">*Projected — this week hasn\'t been scored yet.</p>' : ''}
     </div>`;
   }).join('');
+
+  document.querySelectorAll('.week-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById('week-panel-' + btn.dataset.week);
+      const nowOpen = !panel.classList.contains('open');
+      panel.classList.toggle('open', nowOpen);
+      btn.classList.toggle('open', nowOpen);
+      btn.querySelector('.week-toggle-arrow').textContent = nowOpen ? '▾' : '▸';
+    });
+  });
 }
 
 /* =========================================================================
