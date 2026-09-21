@@ -86,12 +86,6 @@
     font-size:12px;
     color:#9AA4B2;
   }
-  .week-block #lockCountdown{
-    display:block;
-    font-size:11px;
-    color:#8B95A3;
-    margin-top:2px;
-  }
   nav.tabs{
     max-width:960px;
     margin:0 auto;
@@ -284,7 +278,7 @@
 
   /* ---------- Sort controls ---------- */
   .sort-row{
-    display:flex; align-items:center; gap:8px;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
     margin:-4px 0 14px; font-size:13px;
   }
   .sort-label{color:var(--ink-soft);}
@@ -370,23 +364,6 @@
   .breakdown-line:last-child{border-bottom:none;}
   .breakdown-total, .breakdown-final{font-weight:700;}
   .breakdown-final{color:var(--turf); font-size:14px;}
-  .sticky-bar{
-    position:sticky;
-    bottom:0;
-    background:var(--paper);
-    border-top:1px solid var(--line);
-    padding:14px 4px 4px;
-    margin-top:6px;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:12px;
-  }
-  .count-badge{
-    font-family:'Anton',system-ui,sans-serif;
-    font-size:17px;
-  }
-  .count-badge.full{color:var(--turf);}
 
   /* ---------- My picks / history ---------- */
   .week-group{
@@ -463,6 +440,32 @@
     padding:20px;
   }
 
+  /* ---------- Out of picks modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,27,45,0.55);
+    display:flex; align-items:center; justify-content:center;
+    z-index:200; padding:20px;
+  }
+  .modal-box{
+    background:var(--paper); border-radius:var(--radius);
+    padding:26px 24px; max-width:380px; width:100%;
+  }
+  .modal-box h3{font-size:22px; margin-bottom:10px; font-family:'Anton',system-ui,sans-serif;}
+  .modal-box p{font-size:14px; color:var(--ink-soft); margin-bottom:20px; line-height:1.5;}
+  .modal-actions{display:flex; gap:10px; justify-content:flex-end;}
+
+  /* ---------- Kickoff-based lock state ---------- */
+  .pick-card.kickoff-locked{opacity:0.55;}
+  .lock-tag{
+    display:inline-block; font-size:11px; font-weight:700; letter-spacing:0.03em;
+    color:var(--red); background:#FBEAE8; border-radius:999px; padding:3px 10px;
+  }
+  .remove-btn{
+    background:none; border:1px solid var(--red); color:var(--red);
+    border-radius:999px; padding:5px 14px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .remove-btn:hover{background:var(--red); color:var(--paper);}
+
   /* ---------- Mobile ---------- */
   @media (max-width: 480px){
     main{padding:20px 14px 90px;}
@@ -503,7 +506,6 @@
     <div class="week-block" id="weekBlock">
       <strong id="weekLabel">Loading week…</strong>
       <span id="weekDateRange"></span>
-      <span id="lockCountdown"></span>
     </div>
   </div>
   <nav class="tabs" id="tabs">
@@ -564,11 +566,11 @@
   <!-- ---------------- MAKE PICKS ---------------- -->
   <section class="view" id="view-picks">
     <h2 class="section-title">Make Your Picks</h2>
-    <p class="section-sub">Choose exactly five teams for this week from who's actually playing. Anyone can take the same team — there's no draft.</p>
+    <p class="section-sub">Select up to five teams. Each team locks individually once its own game kicks off — everything else stays editable.</p>
 
     <div class="lock-banner" id="picksLockBanner">
-      <span><strong id="picksWeekLabel">Week —</strong> · picks close <span id="picksLockTime">—</span></span>
-      <span id="picksLockStatus"></span>
+      <span><strong id="picksWeekLabel">Week —</strong></span>
+      <span id="picksLockStatus">Each team locks when its own game kicks off</span>
     </div>
 
     <div class="search-row">
@@ -576,17 +578,14 @@
     </div>
     <div class="sort-row">
       <span class="sort-label">Sort by:</span>
-      <button class="sort-btn active" data-sort-target="picks" data-sort="rank">SP+ Rating</button>
+      <button class="sort-btn active" data-sort-target="picks" data-sort="rank">Rating</button>
       <button class="sort-btn" data-sort-target="picks" data-sort="projected">Projected Score</button>
+      <button class="sort-btn sort-more-btn" data-more-target="picks">More ▾</button>
+      <button class="sort-btn sort-more-option" data-sort-target="picks" data-sort="average" style="display:none;">Average Score</button>
+      <button class="sort-btn sort-more-option" data-sort-target="picks" data-sort="lastweek" style="display:none;">Last Week Score</button>
     </div>
 
     <div class="team-list" id="teamList"></div>
-
-    <div class="sticky-bar">
-      <span class="count-badge" id="countBadge">0 / 5 selected</span>
-      <button class="btn" id="submitPicksBtn">Submit picks</button>
-    </div>
-    <div id="picksSubmitMsg" class="hint" style="display:none;"></div>
   </section>
 
   <!-- ---------------- TEAM INFO ---------------- -->
@@ -598,12 +597,27 @@
     </div>
     <div class="sort-row">
       <span class="sort-label">Sort by:</span>
-      <button class="sort-btn active" data-sort-target="teamInfo" data-sort="rank">SP+ Rating</button>
+      <button class="sort-btn active" data-sort-target="teamInfo" data-sort="rank">Rating</button>
       <button class="sort-btn" data-sort-target="teamInfo" data-sort="projected">Projected Score</button>
+      <button class="sort-btn sort-more-btn" data-more-target="teamInfo">More ▾</button>
+      <button class="sort-btn sort-more-option" data-sort-target="teamInfo" data-sort="average" style="display:none;">Average Score</button>
+      <button class="sort-btn sort-more-option" data-sort-target="teamInfo" data-sort="lastweek" style="display:none;">Last Week Score</button>
     </div>
     <div class="team-list" id="teamInfoList"></div>
     <div id="teamInfoDetail" style="display:none;"></div>
   </section>
+
+  <!-- ---------------- OUT OF PICKS MODAL ---------------- -->
+  <div class="modal-backdrop" id="outOfPicksModal" style="display:none;">
+    <div class="modal-box">
+      <h3>Out of picks</h3>
+      <p>You already have 5 teams selected. Remove one from My Picks to free up a slot before selecting another.</p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="outOfPicksCloseBtn">Close</button>
+        <button class="btn" id="outOfPicksGoBtn">Go to My Picks</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ---------------- MY PICKS ---------------- -->
   <section class="view" id="view-myPicks">
@@ -884,6 +898,7 @@ async function enterApp(){
   try {
     await loadConfig();
     await Promise.all([loadTeamScores(), loadSchedule(), loadTeamRanks(), loadTeamLogos()]);
+    await loadMyPicksForWeek(appConfig.currentWeek);
     renderTeamList();
     renderTeamInfoList();
     await renderLeaderboard();
@@ -1040,6 +1055,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
     renderTeamList(document.getElementById('teamSearch').value);
     renderTeamInfoList(document.getElementById('teamInfoSearch').value);
     await renderLeaderboard();
+    await renderMyPicks();
     btn.textContent = '↻ Refresh data';
   } catch (e) {
     console.error('Refresh failed:', e);
@@ -1063,8 +1079,6 @@ async function loadConfig(){
   }
   document.getElementById('weekLabel').textContent = 'WEEK ' + appConfig.currentWeek;
   document.getElementById('picksWeekLabel').textContent = 'Week ' + appConfig.currentWeek;
-  document.getElementById('picksLockTime').textContent = appConfig.lockTime
-    ? new Date(appConfig.lockTime).toLocaleString() : 'not set yet';
   document.getElementById('adminWeekNum').value = appConfig.currentWeek;
   if (appConfig.lockTime){
     document.getElementById('adminLockTime').value = toLocalInputValue(new Date(appConfig.lockTime));
@@ -1079,45 +1093,69 @@ function toLocalInputValue(d){
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function isLocked(){
-  if (!appConfig.lockTime) return false;
-  return new Date() >= new Date(appConfig.lockTime);
+// A team is locked once ITS OWN game has kicked off — not a single
+// whole-week lock time. currentWeekEntry(team) already gives us that team's
+// schedule row for the active week, which now carries a real kickoff time.
+function isTeamKickoffLocked(team){
+  const entry = currentWeekEntry(team);
+  if (!entry || !entry.kickoff) return false;
+  return new Date() >= new Date(entry.kickoff);
 }
 
+let lastLockedSignature = '';
 function startCountdown(){
-  updateCountdown();
-  setInterval(updateCountdown, 1000);
+  updateLockWatcher();
+  setInterval(updateLockWatcher, 15000); // recheck every 15s for kickoffs that just passed
 }
-function updateCountdown(){
-  const el = document.getElementById('lockCountdown');
-  const banner = document.getElementById('picksLockBanner');
-  const status = document.getElementById('picksLockStatus');
-  if (!appConfig.lockTime){ el.textContent = 'No lock set'; return; }
-  const diff = new Date(appConfig.lockTime) - new Date();
-  if (diff <= 0){
-    el.textContent = 'Picks locked';
-    banner.classList.add('locked');
-    status.textContent = 'Locked';
-    setPicksInteractive(false);
-  } else {
-    const d = Math.floor(diff/86400000);
-    const h = Math.floor((diff%86400000)/3600000);
-    const m = Math.floor((diff%3600000)/60000);
-    const s = Math.floor((diff%60000)/1000);
-    el.textContent = `Locks in ${d>0?d+'d ':''}${h}h ${m}m ${s}s`;
-    banner.classList.remove('locked');
-    status.textContent = 'Open';
-    setPicksInteractive(true);
+// Re-renders Make Picks / My Picks only when a team's lock state actually
+// changes, rather than on every tick — avoids re-rendering a list a user
+// might be mid-interaction with for no reason.
+function updateLockWatcher(){
+  const nowLocked = TEAMS
+    .filter(t => teamPlayingThisWeek(t.name) && isTeamKickoffLocked(t.name))
+    .map(t => t.name).sort().join(',');
+  if (nowLocked === lastLockedSignature) return;
+  lastLockedSignature = nowLocked;
+  if (document.getElementById('view-picks').classList.contains('active')){
+    renderTeamList(document.getElementById('teamSearch').value);
+  }
+  if (document.getElementById('view-myPicks').classList.contains('active')){
+    renderMyPicks();
   }
 }
-function setPicksInteractive(open){
-  document.getElementById('submitPicksBtn').disabled = !open;
-  document.querySelectorAll('#teamList .pick-card').forEach(r => {
-    r.classList.toggle('disabled', !open);
-    const selectBtn = r.querySelector('.select-btn');
-    if (selectBtn) selectBtn.disabled = !open;
-  });
+
+async function savePicksToFirestore(){
+  const week = appConfig.currentWeek;
+  const docId = `${week}__${currentUser.uid}`;
+  try {
+    await db.collection('picks').doc(docId).set({
+      week, uid: currentUser.uid, displayName: currentUser.displayName,
+      teams: Array.from(selectedTeams), submittedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('Could not save picks:', e);
+  }
 }
+async function loadMyPicksForWeek(week){
+  selectedTeams = new Set();
+  try {
+    const doc = await db.collection('picks').doc(`${week}__${currentUser.uid}`).get();
+    if (doc.exists && Array.isArray(doc.data().teams)){
+      selectedTeams = new Set(doc.data().teams);
+    }
+  } catch (e) { console.error('Could not load existing picks:', e); }
+}
+function showOutOfPicksModal(){
+  document.getElementById('outOfPicksModal').style.display = 'flex';
+}
+function hideOutOfPicksModal(){
+  document.getElementById('outOfPicksModal').style.display = 'none';
+}
+document.getElementById('outOfPicksCloseBtn').addEventListener('click', hideOutOfPicksModal);
+document.getElementById('outOfPicksGoBtn').addEventListener('click', () => {
+  hideOutOfPicksModal();
+  document.querySelector('[data-view="myPicks"]').click();
+});
 
 /* =========================================================================
    6. NAVIGATION
@@ -1139,6 +1177,12 @@ document.getElementById('loginBtn').addEventListener('click', handleLogin);
 /* =========================================================================
    7. MAKE PICKS
    ========================================================================= */
+function teamLastWeekScore(team){
+  const weeks = Object.keys(teamScoresCache).map(Number)
+    .filter(w => typeof teamScoresCache[w][team] === 'number')
+    .sort((a,b) => b - a);
+  return weeks.length ? teamScoresCache[weeks[0]][team] : null;
+}
 function sortedTeams(list, mode){
   const copy = list.slice();
   if (mode === 'projected'){
@@ -1146,6 +1190,16 @@ function sortedTeams(list, mode){
       const pa = projectedScoreFor(a.name), pb = projectedScoreFor(b.name);
       const va = pa ? pa.projected : -Infinity, vb = pb ? pb.projected : -Infinity;
       return vb - va;
+    });
+  } else if (mode === 'average'){
+    copy.sort((a,b) => {
+      const va = teamSeasonAverage(a.name), vb = teamSeasonAverage(b.name);
+      return (vb ?? -Infinity) - (va ?? -Infinity);
+    });
+  } else if (mode === 'lastweek'){
+    copy.sort((a,b) => {
+      const va = teamLastWeekScore(a.name), vb = teamLastWeekScore(b.name);
+      return (vb ?? -Infinity) - (va ?? -Infinity);
     });
   } else {
     copy.sort((a,b) => (teamRank(a.name) ?? a.rank) - (teamRank(b.name) ?? b.rank));
@@ -1176,10 +1230,14 @@ function renderTeamList(filter){
       ? `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (#'+entry.opponentRank+')' : ''}`
       : 'No game this week';
     const isSelected = selectedTeams.has(t.name);
+    const locked = isTeamKickoffLocked(t.name);
     const logo = teamLogosCache[t.name];
 
     const row = document.createElement('div');
-    row.className = 'pick-card team-row' + (isSelected ? ' checked' : '') + (!isSelected && atMax ? ' maxed' : '');
+    row.className = 'pick-card team-row'
+      + (isSelected ? ' checked' : '')
+      + (!isSelected && atMax && !locked ? ' maxed' : '')
+      + (locked ? ' kickoff-locked' : '');
     row.innerHTML = `
       ${logo ? `<div class="pick-card-logo"><img src="${logo}" alt="" loading="lazy"></div>` : ''}
       <div class="pick-card-body">
@@ -1193,41 +1251,41 @@ function renderTeamList(filter){
         </div>
         <div class="pick-card-meta">${oppText} · opponent multiplier ×${mult.toFixed(2)}</div>
         <div class="pick-card-actions">
-          <button type="button" class="select-btn">${isSelected ? 'Selected' : 'Select'}</button>
+          ${locked
+            ? `<span class="lock-tag">${isSelected ? 'Locked — in lineup' : 'Kickoff started'}</span>`
+            : `<button type="button" class="select-btn">${isSelected ? 'Selected' : 'Select'}</button>`}
           <button type="button" class="team-info-btn">Team Info</button>
         </div>
       </div>
     `;
     row.querySelector('.team-info-btn').addEventListener('click', (e) => { e.stopPropagation(); goToTeamInfo(t.name); });
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.team-info-btn')) return;
-      onTeamToggle(t.name, !isSelected);
-    });
+    if (!locked){
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.team-info-btn')) return;
+        onTeamToggle(t.name, !isSelected);
+      });
+    }
     wrap.appendChild(row);
   });
-  updateCountBadge();
-  setPicksInteractive(!isLocked());
 }
-function onTeamToggle(name, checked){
-  if (checked){
+function onTeamToggle(name, wantSelected){
+  if (wantSelected){
+    if (isTeamKickoffLocked(name)) return; // its game already started — can't add it now
     if (selectedTeams.size >= 5){
-      renderTeamList(document.getElementById('teamSearch').value);
+      showOutOfPicksModal();
       return;
     }
     selectedTeams.add(name);
   } else {
+    if (isTeamKickoffLocked(name)) return; // locked picks can't be removed
     selectedTeams.delete(name);
   }
+  savePicksToFirestore();
   renderTeamList(document.getElementById('teamSearch').value);
-}
-function updateCountBadge(){
-  const badge = document.getElementById('countBadge');
-  badge.textContent = `${selectedTeams.size} / 5 selected`;
-  badge.classList.toggle('full', selectedTeams.size === 5);
 }
 document.getElementById('teamSearch').addEventListener('input', (e) => renderTeamList(e.target.value));
 
-document.querySelectorAll('.sort-btn').forEach(btn => {
+document.querySelectorAll('.sort-btn[data-sort]').forEach(btn => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.sortTarget;
     const mode = btn.dataset.sort;
@@ -1243,32 +1301,15 @@ document.querySelectorAll('.sort-btn').forEach(btn => {
   });
 });
 
-document.getElementById('submitPicksBtn').addEventListener('click', async () => {
-  const msg = document.getElementById('picksSubmitMsg');
-  if (selectedTeams.size !== 5){
-    msg.textContent = 'Pick exactly 5 teams first.';
-    msg.style.display = 'block';
-    return;
-  }
-  if (isLocked()){
-    msg.textContent = 'Picks are locked for this week.';
-    msg.style.display = 'block';
-    return;
-  }
-  const week = appConfig.currentWeek;
-  const docId = `${week}__${currentUser.uid}`;
-  try{
-    await db.collection('picks').doc(docId).set({
-      week, uid: currentUser.uid, displayName: currentUser.displayName,
-      teams: Array.from(selectedTeams), submittedAt: new Date().toISOString()
+document.querySelectorAll('.sort-more-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.moreTarget;
+    const nowOpen = btn.textContent.indexOf('▾') !== -1;
+    btn.textContent = nowOpen ? 'Less ▴' : 'More ▾';
+    document.querySelectorAll(`.sort-more-option[data-sort-target="${target}"]`).forEach(opt => {
+      opt.style.display = nowOpen ? 'inline-block' : 'none';
     });
-    msg.textContent = `Saved! Your 5 picks for Week ${week} are locked in.`;
-    msg.style.display = 'block';
-  } catch(e){
-    msg.textContent = 'Could not save your picks — try again.';
-    msg.style.display = 'block';
-    console.error(e);
-  }
+  });
 });
 
 /* =========================================================================
@@ -1312,11 +1353,20 @@ async function renderMyPicks(){
       const oppText = weekEntry
         ? `${weekEntry.home ? 'vs' : '@'} ${weekEntry.opponent}${typeof weekEntry.opponentRank === 'number' ? ' (#'+weekEntry.opponentRank+')' : ''}`
         : '—';
+
+      let statusCell = '';
+      if (isCurrentUnscored){
+        const locked = isTeamKickoffLocked(t);
+        statusCell = locked
+          ? '<td><span class="lock-tag">Locked</span></td>'
+          : `<td><button type="button" class="remove-btn" data-remove-team="${t}">Remove</button></td>`;
+      }
       return `<tr>
         <td class="team-cell">${t}</td>
         <td>${oppText}</td>
         <td class="num-cell">${mult != null ? '×' + mult.toFixed(2) : '—'}</td>
         <td class="score-cell">${typeof scoreVal === 'number' ? scoreVal.toFixed(1) : '—'}${isProj ? '*' : ''}</td>
+        ${statusCell}
       </tr>`;
     }).join('');
 
@@ -1340,13 +1390,20 @@ async function renderMyPicks(){
           <span class="weekly-total-value">${wd.total.toFixed(1)}</span>
         </div>
         <table class="my-picks-table">
-          <thead><tr><th>Team</th><th>Opponent</th><th>Mult</th><th>${wd.isCurrentUnscored ? 'Proj' : 'Score'}</th></tr></thead>
+          <thead><tr><th>Team</th><th>Opponent</th><th>Mult</th><th>${wd.isCurrentUnscored ? 'Proj' : 'Score'}</th>${wd.isCurrentUnscored ? '<th>Status</th>' : ''}</tr></thead>
           <tbody>${wd.rows}</tbody>
         </table>
-        ${wd.isCurrentUnscored ? '<p class="hint">*Projected — this week hasn\'t been scored yet.</p>' : ''}
+        ${wd.isCurrentUnscored ? '<p class="hint">*Projected — this week hasn\'t been scored yet. Remove an unlocked team, then pick a replacement in Make Picks.</p>' : ''}
       </div>
     </div>`;
   }).join('');
+
+  document.querySelectorAll('[data-remove-team]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      onTeamToggle(btn.dataset.removeTeam, false);
+      renderMyPicks();
+    });
+  });
 
   document.querySelectorAll('.week-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1565,10 +1622,12 @@ document.getElementById('saveWeekBtn').addEventListener('click', async () => {
   appConfig.lockTime = lockTime;
   document.getElementById('weekLabel').textContent = 'WEEK ' + week;
   document.getElementById('picksWeekLabel').textContent = 'Week ' + week;
-  document.getElementById('picksLockTime').textContent = lockTime ? new Date(lockTime).toLocaleString() : 'not set yet';
   const range = await loadWeekDateRange(week, true);
   document.getElementById('weekDateRange').textContent = formatWeekDateRange(range);
+  await loadMyPicksForWeek(week);
+  lastLockedSignature = ''; // force the lock-watcher to re-check against the new week
   renderTeamList(document.getElementById('teamSearch').value);
+  await renderMyPicks();
   msg.textContent = 'Saved.';
   setTimeout(() => msg.textContent = '', 2500);
 });
