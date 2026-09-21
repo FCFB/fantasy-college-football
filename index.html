@@ -1555,6 +1555,7 @@ async function renderLeaderboard(){
   const totals = {}; // uid -> { displayName, total, lastWeekPts, weeks: Set }
   picksSnap.forEach(d => {
     const p = d.data();
+    if (!p.uid) return; // leftover doc from the old username-keyed system — not a real account, skip it
     const scores = scoresByWeek[String(p.week)] || {};
     const weekTotal = p.teams.reduce((sum,t) => sum + (typeof scores[t] === 'number' ? scores[t] : 0), 0);
     if (!totals[p.uid]) totals[p.uid] = { displayName: p.displayName || 'Player', total: 0, lastWeekPts: null, weeks: new Set() };
