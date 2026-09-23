@@ -210,6 +210,9 @@
     vertical-align:middle;
   }
   table.board tr.me td{background:#FBF3DE;}
+  table.board tr.leaderboard-row{cursor:pointer;}
+  table.board tr.leaderboard-row:hover td{background:#EFEBDD;}
+  table.board tr.leaderboard-row.me:hover td{background:#F5E8C8;}
   .rank-num{
     font-family:'Anton',system-ui,sans-serif;
     font-size:20px;
@@ -329,14 +332,9 @@
   }
   .team-info-btn:hover{border-color:var(--turf); color:var(--turf);}
 
-  /* ---------- Team Info ---------- */
-  #teamInfoDetail{
-    border-top:1px solid var(--line);
-    margin-top:18px;
-    padding-top:18px;
-  }
-  #teamInfoDetail h3{font-size:22px;margin-bottom:12px;}
-  #teamInfoDetail h4{font-size:15px;margin:18px 0 8px;}
+  /* ---------- Team Info modal body ---------- */
+  #teamInfoModalBody h3{font-size:22px;margin-bottom:12px;}
+  #teamInfoModalBody h4{font-size:15px;margin:18px 0 8px;}
   .stat-card-row{display:flex; gap:12px; margin-bottom:8px;}
   .stat-card{
     flex:1; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius);
@@ -440,7 +438,7 @@
     padding:20px;
   }
 
-  /* ---------- Out of picks modal ---------- */
+  /* ---------- Modals (out of picks / team info / profile) ---------- */
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(15,27,45,0.55);
     display:flex; align-items:center; justify-content:center;
@@ -453,6 +451,15 @@
   .modal-box h3{font-size:22px; margin-bottom:10px; font-family:'Anton',system-ui,sans-serif;}
   .modal-box p{font-size:14px; color:var(--ink-soft); margin-bottom:20px; line-height:1.5;}
   .modal-actions{display:flex; gap:10px; justify-content:flex-end;}
+  .modal-box-wide{
+    max-width:600px; max-height:85vh; overflow-y:auto; position:relative; padding-top:44px;
+  }
+  .modal-close-x{
+    position:absolute; top:14px; right:14px;
+    background:none; border:none; font-size:18px; color:var(--ink-soft);
+    cursor:pointer; width:32px; height:32px; border-radius:50%;
+  }
+  .modal-close-x:hover{background:var(--chalk); color:var(--ink);}
 
   /* ---------- Kickoff-based lock state ---------- */
   .pick-card.kickoff-locked{opacity:0.55;}
@@ -511,7 +518,6 @@
   <nav class="tabs" id="tabs">
     <button data-view="leaderboard" class="active">Leaderboard</button>
     <button data-view="picks">Make Picks</button>
-    <button data-view="teamInfo">Team Info</button>
     <button data-view="myPicks">My Picks</button>
     <button data-view="admin">Admin</button>
     <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
@@ -588,24 +594,21 @@
     <div class="team-list" id="teamList"></div>
   </section>
 
-  <!-- ---------------- TEAM INFO ---------------- -->
-  <section class="view" id="view-teamInfo">
-    <h2 class="section-title">Team Info</h2>
-    <p class="section-sub">Pick a team to see its past results (click any game for a stat-by-stat breakdown), projected score, and upcoming schedule.</p>
-    <div class="search-row">
-      <input type="text" id="teamInfoSearch" placeholder="Search teams…">
+  <!-- ---------------- TEAM INFO MODAL ---------------- -->
+  <div class="modal-backdrop" id="teamInfoModal" style="display:none;">
+    <div class="modal-box modal-box-wide">
+      <button type="button" class="modal-close-x" id="teamInfoModalCloseX" aria-label="Close">✕</button>
+      <div id="teamInfoModalBody"></div>
     </div>
-    <div class="sort-row">
-      <span class="sort-label">Sort by:</span>
-      <button class="sort-btn active" data-sort-target="teamInfo" data-sort="rank">Rating</button>
-      <button class="sort-btn" data-sort-target="teamInfo" data-sort="projected">Projected Score</button>
-      <button class="sort-btn sort-more-btn" data-more-target="teamInfo">More ▾</button>
-      <button class="sort-btn sort-more-option" data-sort-target="teamInfo" data-sort="average" style="display:none;">Average Score</button>
-      <button class="sort-btn sort-more-option" data-sort-target="teamInfo" data-sort="lastweek" style="display:none;">Last Week Score</button>
+  </div>
+
+  <!-- ---------------- PROFILE MODAL ---------------- -->
+  <div class="modal-backdrop" id="profileModal" style="display:none;">
+    <div class="modal-box modal-box-wide">
+      <button type="button" class="modal-close-x" id="profileModalCloseX" aria-label="Close">✕</button>
+      <div id="profileModalBody"></div>
     </div>
-    <div class="team-list" id="teamInfoList"></div>
-    <div id="teamInfoDetail" style="display:none;"></div>
-  </section>
+  </div>
 
   <!-- ---------------- OUT OF PICKS MODAL ---------------- -->
   <div class="modal-backdrop" id="outOfPicksModal" style="display:none;">
@@ -750,8 +753,7 @@ let currentUser = null;      // { username, displayName }
 let appConfig = { currentWeek: 1, lockTime: null, adminPin: null };
 let selectedTeams = new Set();
 let isAdminUnlocked = false;
-let picksSortMode = 'rank';     // 'rank' | 'projected' — Make Picks list order
-let teamInfoSortMode = 'rank';  // 'rank' | 'projected' — Team Info list order
+let picksSortMode = 'rank';     // 'rank' | 'projected' | 'average' | 'lastweek' — Make Picks list order
 
 // Caches populated from Firestore, refreshed on login and via the Refresh button
 let teamScoresCache = {};     // { "3": { "Ohio State": 72.68, ... }, ... }
@@ -900,7 +902,6 @@ async function enterApp(){
     await Promise.all([loadTeamScores(), loadSchedule(), loadTeamRanks(), loadTeamLogos()]);
     await loadMyPicksForWeek(appConfig.currentWeek);
     renderTeamList();
-    renderTeamInfoList();
     await renderLeaderboard();
     await renderMyPicks();
     startCountdown();
@@ -1028,23 +1029,16 @@ function projectedScoreFor(team){
   const multiplier = entry ? computeMultiplierClient(teamRank(team), entry.opponentRank) : 1;
   return { base, multiplier, projected: base * multiplier, opponentEntry: entry };
 }
-function teamMetaLine(team){
-  const entry = currentWeekEntry(team);
-  if (!entry) return 'No game this week';
-  const oppText = `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (#'+entry.opponentRank+')' : ''}`;
-  const mult = computeMultiplierClient(teamRank(team), entry.opponentRank);
-  return `${oppText} · ×${mult.toFixed(2)}`;
-}
-function goToTeamInfo(team){
-  document.querySelectorAll('nav.tabs button[data-view]').forEach(b => b.classList.remove('active'));
-  const tab = document.querySelector('[data-view="teamInfo"]');
-  if (tab) tab.classList.add('active');
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-teamInfo').classList.add('active');
-  document.getElementById('teamInfoSearch').value = '';
-  renderTeamInfoList('');
+function openTeamInfoModal(team){
+  document.getElementById('teamInfoModal').style.display = 'flex';
   showTeamDetail(team);
 }
+document.getElementById('teamInfoModalCloseX').addEventListener('click', () => {
+  document.getElementById('teamInfoModal').style.display = 'none';
+});
+document.getElementById('teamInfoModal').addEventListener('click', (e) => {
+  if (e.target.id === 'teamInfoModal') document.getElementById('teamInfoModal').style.display = 'none';
+});
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   const btn = document.getElementById('refreshBtn');
   btn.disabled = true;
@@ -1053,7 +1047,6 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
     await Promise.all([loadTeamScores(true), loadSchedule(true), loadTeamRanks(true), loadTeamLogos(true), loadWeekDateRange(appConfig.currentWeek, true)]);
     document.getElementById('weekDateRange').textContent = formatWeekDateRange(weekDateRangeCache);
     renderTeamList(document.getElementById('teamSearch').value);
-    renderTeamInfoList(document.getElementById('teamInfoSearch').value);
     await renderLeaderboard();
     await renderMyPicks();
     btn.textContent = '↻ Refresh data';
@@ -1169,7 +1162,6 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('view-' + btn.dataset.view).classList.add('active');
   if (btn.dataset.view === 'leaderboard') renderLeaderboard();
   if (btn.dataset.view === 'myPicks') renderMyPicks();
-  if (btn.dataset.view === 'teamInfo') renderTeamInfoList(document.getElementById('teamInfoSearch').value);
 });
 document.getElementById('logoutBtn').addEventListener('click', logout);
 document.getElementById('loginBtn').addEventListener('click', handleLogin);
@@ -1258,7 +1250,7 @@ function renderTeamList(filter){
         </div>
       </div>
     `;
-    row.querySelector('.team-info-btn').addEventListener('click', (e) => { e.stopPropagation(); goToTeamInfo(t.name); });
+    row.querySelector('.team-info-btn').addEventListener('click', (e) => { e.stopPropagation(); openTeamInfoModal(t.name); });
     if (!locked){
       row.addEventListener('click', (e) => {
         if (e.target.closest('.team-info-btn')) return;
@@ -1291,13 +1283,8 @@ document.querySelectorAll('.sort-btn[data-sort]').forEach(btn => {
     const mode = btn.dataset.sort;
     document.querySelectorAll(`.sort-btn[data-sort-target="${target}"]`).forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    if (target === 'picks'){
-      picksSortMode = mode;
-      renderTeamList(document.getElementById('teamSearch').value);
-    } else {
-      teamInfoSortMode = mode;
-      renderTeamInfoList(document.getElementById('teamInfoSearch').value);
-    }
+    picksSortMode = mode;
+    renderTeamList(document.getElementById('teamSearch').value);
   });
 });
 
@@ -1315,15 +1302,15 @@ document.querySelectorAll('.sort-more-btn').forEach(btn => {
 /* =========================================================================
    8. MY PICKS
    ========================================================================= */
-async function renderMyPicks(){
-  const wrap = document.getElementById('myPicksWrap');
-  wrap.innerHTML = '<div class="empty-state">Loading your picks…</div>';
-  const snap = await db.collection('picks').where('uid','==',currentUser.uid).get();
-  if (snap.empty){
-    wrap.innerHTML = `<div class="empty-state">You haven't made any picks yet. <a data-go="picks">Make your first five</a>.</div>`;
-    wrap.querySelector('[data-go]').addEventListener('click', () => document.querySelector('[data-view=picks]').click());
-    return;
-  }
+// Builds the week-by-week picks accordion for a given uid. editable=true adds
+// Remove buttons for the current unscored week (My Picks); editable=false is
+// pure read-only history (viewing someone else's profile). idPrefix keeps
+// element IDs unique when My Picks and a Profile modal are both in the DOM
+// at once.
+async function buildPicksAccordionHtml(uid, idPrefix, editable){
+  const snap = await db.collection('picks').where('uid','==',uid).get();
+  if (snap.empty) return { html: '', empty: true, total: 0, weeksPlayed: 0 };
+
   const weeks = [];
   snap.forEach(d => weeks.push(d.data()));
   weeks.sort((a,b) => b.week - a.week);
@@ -1334,7 +1321,7 @@ async function renderMyPicks(){
     const scores = teamScoresCache[String(w.week)] || {};
     const breakdowns = teamBreakdownCache[String(w.week)] || {};
     const anyScored = w.teams.some(t => typeof scores[t] === 'number');
-    const isCurrentUnscored = !anyScored && w.week === appConfig.currentWeek;
+    const isCurrentUnscored = editable && !anyScored && w.week === appConfig.currentWeek;
 
     let total = 0;
     const rows = w.teams.map(t => {
@@ -1373,18 +1360,21 @@ async function renderMyPicks(){
     return { week: w.week, isCurrentUnscored, anyScored, total, rows };
   });
 
+  const grandTotal = weekData.reduce((s, wd) => s + wd.total, 0);
+
   // Most recent week (current, or the last scored one) starts open; every
   // past week starts collapsed — click its header row to expand it.
-  wrap.innerHTML = weekData.map((wd, i) => {
+  const html = weekData.map((wd, i) => {
     const openByDefault = i === 0;
+    const panelId = `week-panel-${idPrefix}-${wd.week}`;
     return `
     <div class="week-group">
-      <button type="button" class="week-toggle${openByDefault ? ' open' : ''}" data-week="${wd.week}">
+      <button type="button" class="week-toggle${openByDefault ? ' open' : ''}" data-panel="${panelId}">
         <span class="week-toggle-label">Week ${wd.week}${wd.week === appConfig.currentWeek ? ' (current)' : ''}</span>
         <span class="week-toggle-total">${wd.isCurrentUnscored ? 'Proj ' : ''}${wd.total.toFixed(1)} pts</span>
         <span class="week-toggle-arrow">${openByDefault ? '▾' : '▸'}</span>
       </button>
-      <div class="week-panel${openByDefault ? ' open' : ''}" id="week-panel-${wd.week}">
+      <div class="week-panel${openByDefault ? ' open' : ''}" id="${panelId}">
         <div class="weekly-total-banner ${wd.anyScored ? 'scored' : ''}">
           <span class="weekly-total-label">${wd.isCurrentUnscored ? 'PROJECTED WEEKLY TOTAL' : 'WEEKLY TOTAL'}</span>
           <span class="weekly-total-value">${wd.total.toFixed(1)}</span>
@@ -1398,16 +1388,18 @@ async function renderMyPicks(){
     </div>`;
   }).join('');
 
-  document.querySelectorAll('[data-remove-team]').forEach(btn => {
+  return { html, empty: false, total: grandTotal, weeksPlayed: weekData.length };
+}
+function wirePicksAccordion(container){
+  container.querySelectorAll('[data-remove-team]').forEach(btn => {
     btn.addEventListener('click', () => {
       onTeamToggle(btn.dataset.removeTeam, false);
       renderMyPicks();
     });
   });
-
-  document.querySelectorAll('.week-toggle').forEach(btn => {
+  container.querySelectorAll('.week-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const panel = document.getElementById('week-panel-' + btn.dataset.week);
+      const panel = document.getElementById(btn.dataset.panel);
       const nowOpen = !panel.classList.contains('open');
       panel.classList.toggle('open', nowOpen);
       btn.classList.toggle('open', nowOpen);
@@ -1416,31 +1408,54 @@ async function renderMyPicks(){
   });
 }
 
-/* =========================================================================
-   8b. TEAM INFO — past results, avg pts/week, and upcoming schedule
-   ========================================================================= */
-function renderTeamInfoList(filter){
-  const wrap = document.getElementById('teamInfoList');
-  wrap.innerHTML = '';
-  const f = (filter || '').toLowerCase();
-  const filtered = TEAMS.filter(t => t.name.toLowerCase().includes(f));
-  sortedTeams(filtered, teamInfoSortMode).forEach(t => {
-    const proj = projectedScoreFor(t.name);
-    const row = document.createElement('div');
-    row.className = 'team-row';
-    row.innerHTML = `
-      <span class="team-rank">#${teamRank(t.name) ?? t.rank}</span>
-      <span class="team-name-col">
-        <span class="team-name-main">${t.name}${proj ? ` <span style="color:var(--turf);font-weight:400;">— ${proj.projected.toFixed(1)} proj</span>` : ''}</span>
-        <span class="team-meta">${teamMetaLine(t.name)}</span>
-      </span>
-    `;
-    row.addEventListener('click', () => showTeamDetail(t.name));
-    wrap.appendChild(row);
-  });
+async function renderMyPicks(){
+  const wrap = document.getElementById('myPicksWrap');
+  wrap.innerHTML = '<div class="empty-state">Loading your picks…</div>';
+  const result = await buildPicksAccordionHtml(currentUser.uid, 'my', true);
+  if (result.empty){
+    wrap.innerHTML = `<div class="empty-state">You haven't made any picks yet. <a data-go="picks">Make your first five</a>.</div>`;
+    wrap.querySelector('[data-go]').addEventListener('click', () => document.querySelector('[data-view=picks]').click());
+    return;
+  }
+  wrap.innerHTML = result.html;
+  wirePicksAccordion(wrap);
 }
-document.getElementById('teamInfoSearch').addEventListener('input', (e) => renderTeamInfoList(e.target.value));
 
+// ---- Profile modal (viewing anyone's stats from the Leaderboard) ----
+async function openProfileModal(uid, displayName, total, weeksPlayed, lastWeekPts){
+  const modal = document.getElementById('profileModal');
+  const body = document.getElementById('profileModalBody');
+  modal.style.display = 'flex';
+  body.innerHTML = '<div class="empty-state">Loading profile…</div>';
+
+  const headerHtml = `
+    <h3>${displayName}</h3>
+    <div class="stat-card-row">
+      <div class="stat-card">
+        <span class="stat-card-label">Total Points</span>
+        <span class="stat-card-value">${total.toFixed(1)}</span>
+        <span class="stat-card-sub">${weeksPlayed} week${weeksPlayed === 1 ? '' : 's'} played</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-card-label">Last Week</span>
+        <span class="stat-card-value">${lastWeekPts != null ? lastWeekPts.toFixed(1) : '—'}</span>
+      </div>
+    </div>
+  `;
+  const result = await buildPicksAccordionHtml(uid, 'profile', false);
+  body.innerHTML = headerHtml + (result.empty ? '<p class="hint">No picks made yet.</p>' : result.html);
+  if (!result.empty) wirePicksAccordion(body);
+}
+document.getElementById('profileModalCloseX').addEventListener('click', () => {
+  document.getElementById('profileModal').style.display = 'none';
+});
+document.getElementById('profileModal').addEventListener('click', (e) => {
+  if (e.target.id === 'profileModal') document.getElementById('profileModal').style.display = 'none';
+});
+
+/* =========================================================================
+   8b. TEAM INFO MODAL — past results, projected score, upcoming schedule
+   ========================================================================= */
 function teamSeasonAverage(team){
   const scores = Object.values(teamScoresCache)
     .map(weekObj => weekObj[team])
@@ -1449,14 +1464,13 @@ function teamSeasonAverage(team){
   return scores.reduce((a,b) => a+b, 0) / scores.length;
 }
 function showTeamDetail(team){
-  const box = document.getElementById('teamInfoDetail');
+  const box = document.getElementById('teamInfoModalBody');
   const rank = teamRank(team);
   const proj = projectedScoreFor(team);
   const seasonAvg = teamSeasonAverage(team);
   const past = scheduleCache.filter(s => s.team === team && s.completed).sort((a,b) => a.week - b.week);
   const upcoming = scheduleCache.filter(s => s.team === team && !s.completed).sort((a,b) => a.week - b.week);
 
-  box.style.display = 'block';
   box.innerHTML = `
     <h3>${team}${rank ? ' · SP+ #' + rank : ''}</h3>
     <div class="stat-card-row">
@@ -1477,7 +1491,6 @@ function showTeamDetail(team){
     ${upcoming.length ? renderScheduleTable(upcoming) : '<p class="hint">Nothing scheduled — check back after the next sync.</p>'}
   `;
   if (past.length) wirePastGameClicks(team);
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function renderPastGames(rows, team){
   return rows.map(r => {
@@ -1576,7 +1589,7 @@ async function renderLeaderboard(){
   }
 
   body.innerHTML = rows.map((r,i) => `
-    <tr class="${r.uid === currentUser.uid ? 'me' : ''}">
+    <tr class="leaderboard-row ${r.uid === currentUser.uid ? 'me' : ''}" data-row-index="${i}">
       <td class="rank-num ${i<3?'top3':''}">${i+1}</td>
       <td>${r.displayName}</td>
       <td class="weeks-played">${r.weeks.size}</td>
@@ -1584,6 +1597,13 @@ async function renderLeaderboard(){
       <td class="pts-cell"><span class="pts">${r.total.toFixed(1)}</span></td>
     </tr>
   `).join('');
+
+  body.querySelectorAll('.leaderboard-row').forEach(row => {
+    const r = rows[Number(row.dataset.rowIndex)];
+    row.addEventListener('click', () => {
+      openProfileModal(r.uid, r.displayName, r.total, r.weeks.size, r.lastWeekPts);
+    });
+  });
 }
 
 /* =========================================================================
