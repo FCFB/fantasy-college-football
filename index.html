@@ -334,6 +334,8 @@
 
   /* ---------- Team Info modal body ---------- */
   #teamInfoModalBody h3{font-size:22px;margin-bottom:12px;}
+  .team-detail-title{display:flex; align-items:center; gap:10px;}
+  .team-detail-logo{width:36px; height:36px; object-fit:contain; flex-shrink:0;}
   #teamInfoModalBody h4{font-size:15px;margin:18px 0 8px;}
   .stat-card-row{display:flex; gap:12px; margin-bottom:8px;}
   .stat-card{
@@ -1468,11 +1470,20 @@ function showTeamDetail(team){
   const rank = teamRank(team);
   const proj = projectedScoreFor(team);
   const seasonAvg = teamSeasonAverage(team);
+  const logo = teamLogosCache[team];
+  const entry = currentWeekEntry(team);
   const past = scheduleCache.filter(s => s.team === team && s.completed).sort((a,b) => a.week - b.week);
   const upcoming = scheduleCache.filter(s => s.team === team && !s.completed).sort((a,b) => a.week - b.week);
 
+  const opponentText = entry
+    ? `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (SP+ #'+entry.opponentRank+')' : ''}`
+    : 'No game this week';
+
   box.innerHTML = `
-    <h3>${team}${rank ? ' · SP+ #' + rank : ''}</h3>
+    <h3 class="team-detail-title">
+      ${logo ? `<img src="${logo}" alt="" class="team-detail-logo">` : ''}
+      <span>${team}${rank ? ' · SP+ #' + rank : ''}</span>
+    </h3>
     <div class="stat-card-row">
       <div class="stat-card">
         <span class="stat-card-label">Season Average</span>
@@ -1483,6 +1494,7 @@ function showTeamDetail(team){
         <span class="stat-card-label">Projected This Week</span>
         <span class="stat-card-value">${proj != null ? proj.projected.toFixed(1) : '—'}</span>
         <span class="stat-card-sub">${proj != null ? `${proj.base.toFixed(1)} base × ${proj.multiplier.toFixed(2)} mult.` : 'No history yet'}</span>
+        <span class="stat-card-sub">${opponentText}</span>
       </div>
     </div>
     <h4>Past games <span class="hint">(tap a game for the stat breakdown)</span></h4>
