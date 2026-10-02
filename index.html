@@ -462,6 +462,21 @@
     cursor:pointer; width:32px; height:32px; border-radius:50%;
   }
   .modal-close-x:hover{background:var(--chalk); color:var(--ink);}
+  .welcome-steps{list-style:none; counter-reset:step; margin:6px 0 18px;}
+  .welcome-steps li{
+    counter-increment:step; position:relative; padding:10px 0 10px 40px;
+    border-bottom:1px solid var(--line);
+  }
+  .welcome-steps li:last-child{border-bottom:none;}
+  .welcome-steps li::before{
+    content:counter(step); position:absolute; left:0; top:10px;
+    width:26px; height:26px; border-radius:50%; background:var(--turf); color:var(--paper);
+    font-family:'Anton',system-ui,sans-serif; font-size:14px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .welcome-steps strong{display:block; font-size:15px; margin-bottom:2px;}
+  .welcome-steps p{margin:0; font-size:13.5px; color:var(--ink-soft); line-height:1.4;}
+  .welcome-closer{font-weight:600; color:var(--ink); text-align:center; margin-bottom:0 !important;}
 
   /* ---------- Kickoff-based lock state ---------- */
   .pick-card.kickoff-locked{opacity:0.55;}
@@ -612,6 +627,39 @@
     </div>
   </div>
 
+  <!-- ---------------- WELCOME MODAL (first sign-up only) ---------------- -->
+  <div class="modal-backdrop" id="welcomeModal" style="display:none;">
+    <div class="modal-box modal-box-wide">
+      <h3>Welcome to Fantasy College Football!</h3>
+      <ol class="welcome-steps">
+        <li>
+          <strong>Pick 5 Teams</strong>
+          <p>Each week, choose 5 college football teams to add to your lineup.</p>
+        </li>
+        <li>
+          <strong>Teams Score Fantasy Points</strong>
+          <p>Your teams earn points based on how they perform in their games.</p>
+        </li>
+        <li>
+          <strong>Matchups Matter</strong>
+          <p>Each team's score is adjusted based on the strength of its opponent. Beating a strong opponent can be more valuable than beating a weak one.</p>
+        </li>
+        <li>
+          <strong>Manage Your Picks</strong>
+          <p>You can add or remove teams until that team's game starts. Once their game begins, that team is locked in for the week.</p>
+        </li>
+        <li>
+          <strong>Climb the Leaderboard</strong>
+          <p>Your weekly points are added to your season total. See how you stack up against everyone else!</p>
+        </li>
+      </ol>
+      <p class="welcome-closer">That's it. Pick smart, watch the games, and climb the leaderboard!</p>
+      <div class="modal-actions">
+        <button class="btn" id="welcomeCloseBtn">Let's go</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ---------------- OUT OF PICKS MODAL ---------------- -->
   <div class="modal-backdrop" id="outOfPicksModal" style="display:none;">
     <div class="modal-box">
@@ -646,11 +694,9 @@
 
     <div id="adminPanel" style="display:none;" class="admin-grid">
       <fieldset>
-        <legend>Current week &amp; lock</legend>
+        <legend>Current week</legend>
         <label for="adminWeekNum">Current week number</label>
         <input type="number" id="adminWeekNum" min="1" step="1">
-        <label for="adminLockTime">Picks lock at</label>
-        <input type="datetime-local" id="adminLockTime">
         <button class="btn" id="saveWeekBtn">Save week settings</button>
         <span class="hint" id="saveWeekMsg"></span>
       </fieldset>
@@ -750,9 +796,10 @@ const ADMIN_DISPLAY_NAME = "brainner"; // only this (lowercase) display name see
 const OPPONENT_ADJUSTMENT_FACTOR = 0.25; // must match the Apps Script's WEIGHTS/formula
 const UNRANKED_OPPONENT_MULTIPLIER = 1 - OPPONENT_ADJUSTMENT_FACTOR; // flat discount vs FCS/D2 opponents — must match the backend
 let loginMode = 'signin'; // 'signin' | 'create'
+let justSignedUp = false; // true right after account creation — triggers the welcome modal once
 
 let currentUser = null;      // { username, displayName }
-let appConfig = { currentWeek: 1, lockTime: null, adminPin: null };
+let appConfig = { currentWeek: 1, adminPin: null };
 let selectedTeams = new Set();
 let isAdminUnlocked = false;
 let picksSortMode = 'rank';     // 'rank' | 'projected' | 'average' | 'lastweek' — Make Picks list order
@@ -856,6 +903,7 @@ async function handleLogin(){
       await db.collection('users').doc(cred.user.uid).set({
         email, displayName, createdAt: new Date().toISOString()
       });
+      justSignedUp = true;
       // onAuthStateChanged fires from here and calls enterApp()
     } else {
       await auth.signInWithEmailAndPassword(email, password);
@@ -907,6 +955,10 @@ async function enterApp(){
     await renderLeaderboard();
     await renderMyPicks();
     startCountdown();
+    if (justSignedUp){
+      justSignedUp = false;
+      showWelcomeModal();
+    }
   } catch (e) {
     console.error('Failed to load app data:', e);
     document.getElementById('appMain').innerHTML =
@@ -1075,17 +1127,9 @@ async function loadConfig(){
   document.getElementById('weekLabel').textContent = 'WEEK ' + appConfig.currentWeek;
   document.getElementById('picksWeekLabel').textContent = 'Week ' + appConfig.currentWeek;
   document.getElementById('adminWeekNum').value = appConfig.currentWeek;
-  if (appConfig.lockTime){
-    document.getElementById('adminLockTime').value = toLocalInputValue(new Date(appConfig.lockTime));
-  }
 
   const range = await loadWeekDateRange(appConfig.currentWeek);
   document.getElementById('weekDateRange').textContent = formatWeekDateRange(range);
-}
-
-function toLocalInputValue(d){
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // A team is locked once ITS OWN game has kicked off — not a single
@@ -1146,6 +1190,12 @@ function showOutOfPicksModal(){
 function hideOutOfPicksModal(){
   document.getElementById('outOfPicksModal').style.display = 'none';
 }
+function showWelcomeModal(){
+  document.getElementById('welcomeModal').style.display = 'flex';
+}
+document.getElementById('welcomeCloseBtn').addEventListener('click', () => {
+  document.getElementById('welcomeModal').style.display = 'none';
+});
 document.getElementById('outOfPicksCloseBtn').addEventListener('click', hideOutOfPicksModal);
 document.getElementById('outOfPicksGoBtn').addEventListener('click', () => {
   hideOutOfPicksModal();
@@ -1646,13 +1696,10 @@ document.getElementById('adminUnlockBtn').addEventListener('click', async () => 
 
 document.getElementById('saveWeekBtn').addEventListener('click', async () => {
   const week = parseInt(document.getElementById('adminWeekNum').value, 10);
-  const lockVal = document.getElementById('adminLockTime').value;
   const msg = document.getElementById('saveWeekMsg');
   if (!week){ msg.textContent = 'Enter a valid week number.'; return; }
-  const lockTime = lockVal ? new Date(lockVal).toISOString() : null;
-  await db.collection('config').doc('app').set({ currentWeek: week, lockTime }, { merge: true });
+  await db.collection('config').doc('app').set({ currentWeek: week }, { merge: true });
   appConfig.currentWeek = week;
-  appConfig.lockTime = lockTime;
   document.getElementById('weekLabel').textContent = 'WEEK ' + week;
   document.getElementById('picksWeekLabel').textContent = 'Week ' + week;
   const range = await loadWeekDateRange(week, true);
