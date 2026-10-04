@@ -400,6 +400,9 @@
   table.my-picks-table td.team-cell{font-weight:700;}
   table.my-picks-table td.num-cell{text-align:right; font-variant-numeric:tabular-nums;}
   table.my-picks-table td.score-cell{text-align:right; font-family:'Anton',system-ui,sans-serif; font-size:16px; color:var(--turf);}
+  table.my-picks-table tr.pick-history-row{cursor:pointer;}
+  table.my-picks-table tr.pick-history-row:hover td{background:#EFEBDD;}
+  table.my-picks-table tr.breakdown-panel-row td{background:var(--chalk); padding:14px 16px; border-bottom:1px solid var(--line);}
   .empty-state{
     text-align:center;
     padding:50px 20px;
@@ -538,6 +541,7 @@
     <button data-view="myPicks">My Picks</button>
     <button data-view="admin">Admin</button>
     <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+      <button class="refresh-btn" id="feedbackBtn" title="Send feedback">💬 Feedback</button>
       <button class="refresh-btn" id="refreshBtn" title="Reload the latest data from Firestore">↻ Refresh data</button>
       <button id="logoutBtn">Log out (<span id="whoAmI"></span>)</button>
     </span>
@@ -627,6 +631,20 @@
     </div>
   </div>
 
+  <!-- ---------------- FEEDBACK MODAL ---------------- -->
+  <div class="modal-backdrop" id="feedbackModal" style="display:none;">
+    <div class="modal-box">
+      <h3>Send feedback</h3>
+      <p>Bug, idea, something confusing — whatever it is, it comes straight to the admin.</p>
+      <textarea id="feedbackText" rows="5" placeholder="What's on your mind?" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:var(--radius);font-family:inherit;font-size:14px;margin-bottom:12px;"></textarea>
+      <div id="feedbackMsg" class="hint" style="display:none;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-outline" id="feedbackCloseBtn">Cancel</button>
+        <button class="btn" id="feedbackSubmitBtn">Send</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ---------------- WELCOME MODAL (first sign-up only) ---------------- -->
   <div class="modal-backdrop" id="welcomeModal" style="display:none;">
     <div class="modal-box modal-box-wide">
@@ -713,6 +731,12 @@ Miami, 41.05"></textarea>
         <button class="btn btn-outline" id="loadWeekScoresBtn">Load existing values for this week</button>
         <button class="btn" id="saveScoresBtn">Save team points</button>
         <span class="hint" id="saveScoresMsg"></span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Feedback</legend>
+        <button class="btn btn-outline" id="loadFeedbackBtn">Load feedback</button>
+        <div id="feedbackListWrap" style="margin-top:14px;"></div>
       </fieldset>
     </div>
   </section>
@@ -1193,6 +1217,34 @@ function hideOutOfPicksModal(){
 function showWelcomeModal(){
   document.getElementById('welcomeModal').style.display = 'flex';
 }
+document.getElementById('feedbackBtn').addEventListener('click', () => {
+  document.getElementById('feedbackMsg').style.display = 'none';
+  document.getElementById('feedbackText').value = '';
+  document.getElementById('feedbackModal').style.display = 'flex';
+});
+document.getElementById('feedbackCloseBtn').addEventListener('click', () => {
+  document.getElementById('feedbackModal').style.display = 'none';
+});
+document.getElementById('feedbackSubmitBtn').addEventListener('click', async () => {
+  const text = document.getElementById('feedbackText').value.trim();
+  const msg = document.getElementById('feedbackMsg');
+  if (!text){
+    msg.textContent = 'Write something first.';
+    msg.style.display = 'block';
+    return;
+  }
+  try {
+    await db.collection('feedback').add({
+      uid: currentUser.uid, displayName: currentUser.displayName,
+      message: text, createdAt: new Date().toISOString()
+    });
+    document.getElementById('feedbackModal').style.display = 'none';
+  } catch (e) {
+    console.error('Could not send feedback:', e);
+    msg.textContent = 'Could not send — try again.';
+    msg.style.display = 'block';
+  }
+});
 document.getElementById('welcomeCloseBtn').addEventListener('click', () => {
   document.getElementById('welcomeModal').style.display = 'none';
 });
@@ -1400,12 +1452,17 @@ async function buildPicksAccordionHtml(uid, idPrefix, editable){
           ? '<td><span class="lock-tag">Locked</span></td>'
           : `<td><button type="button" class="remove-btn" data-remove-team="${t}">Remove</button></td>`;
       }
-      return `<tr>
+      const colCount = 4 + (isCurrentUnscored ? 1 : 0);
+      const rowId = `pickrow-${idPrefix}-${w.week}-${t.replace(/\s+/g,'_')}`;
+      return `<tr class="pick-history-row" data-breakdown-row="${rowId}" data-team="${t}" data-week="${w.week}" data-proj="${isProj ? '1' : ''}">
         <td class="team-cell">${t}</td>
         <td>${oppText}</td>
         <td class="num-cell">${mult != null ? '×' + mult.toFixed(2) : '—'}</td>
         <td class="score-cell">${typeof scoreVal === 'number' ? scoreVal.toFixed(1) : '—'}${isProj ? '*' : ''}</td>
         ${statusCell}
+      </tr>
+      <tr class="breakdown-panel-row" id="${rowId}" style="display:none;">
+        <td colspan="${colCount}"></td>
       </tr>`;
     }).join('');
 
@@ -1458,6 +1515,33 @@ function wirePicksAccordion(container){
       btn.querySelector('.week-toggle-arrow').textContent = nowOpen ? '▾' : '▸';
     });
   });
+  container.querySelectorAll('.pick-history-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.remove-btn')) return; // don't toggle when removing a team
+      const panelRow = document.getElementById(row.dataset.breakdownRow);
+      const cell = panelRow.querySelector('td');
+      const isOpen = panelRow.style.display !== 'none';
+      if (isOpen){
+        panelRow.style.display = 'none';
+        return;
+      }
+      const team = row.dataset.team, week = row.dataset.week;
+      cell.innerHTML = row.dataset.proj
+        ? renderProjectionBreakdown(team)
+        : renderBreakdown(team, week);
+      panelRow.style.display = 'table-row';
+    });
+  });
+}
+function renderProjectionBreakdown(team){
+  const proj = projectedScoreFor(team);
+  if (!proj) return '<p class="hint">No projection available.</p>';
+  return `<div class="breakdown-box">
+    <div class="breakdown-line"><span>Recency-weighted base</span><span>${proj.base.toFixed(2)}</span></div>
+    <div class="breakdown-line"><span>Opponent multiplier</span><span>×${proj.multiplier.toFixed(3)}</span></div>
+    <div class="breakdown-line breakdown-final"><span>Projected score</span><span>${proj.projected.toFixed(2)}</span></div>
+    <p class="hint" style="margin-top:8px;">This week hasn't been scored yet — this is a live projection, not a final stat breakdown.</p>
+  </div>`;
 }
 
 async function renderMyPicks(){
@@ -1751,6 +1835,29 @@ document.getElementById('saveScoresBtn').addEventListener('click', async () => {
   await db.collection('teamScores').doc(String(week)).set({ teams }, { merge: true });
   msg.textContent = `Saved ${Object.keys(teams).length} team score(s) for Week ${week}.`;
   setTimeout(() => msg.textContent = '', 3000);
+});
+
+document.getElementById('loadFeedbackBtn').addEventListener('click', async () => {
+  const wrap = document.getElementById('feedbackListWrap');
+  wrap.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const snap = await db.collection('feedback').orderBy('createdAt', 'desc').get();
+    if (snap.empty){
+      wrap.innerHTML = '<p class="hint">No feedback yet.</p>';
+      return;
+    }
+    wrap.innerHTML = snap.docs.map(d => {
+      const f = d.data();
+      const when = f.createdAt ? new Date(f.createdAt).toLocaleString() : '';
+      return `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
+        <div style="font-size:12px;color:var(--ink-soft);">${f.displayName || 'Someone'} · ${when}</div>
+        <div style="font-size:14px;margin-top:3px;">${(f.message || '').replace(/</g,'&lt;')}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    console.error('Could not load feedback:', e);
+    wrap.innerHTML = '<p class="hint">Could not load feedback — check the console.</p>';
+  }
 });
 
 /* =========================================================================
