@@ -862,9 +862,9 @@ const ADMIN_DISPLAY_NAME = "brainner"; // fallback only, used if ADMIN_UID below
 // Paste YOUR Firebase user ID here (Firebase Console → Authentication → Users → "User UID").
 // When set, Admin is tied to that exact account and no PIN is needed. The same UID
 // goes in the Firestore rules (see README). Leave "" to keep the old display-name + PIN behavior.
-const ADMIN_UID = "";
+const ADMIN_UID = "g3aVd6dcCcO8BmnZ25f0RaQCgl83";
 function isAdminUser(){
-  if (ADMIN_UID) return !!currentUser && currentUser.uid === g3aVd6dcCcO8BmnZ25f0RaQCgl83;
+  if (ADMIN_UID) return !!currentUser && currentUser.uid === ADMIN_UID;
   return !!currentUser && (currentUser.displayName || '').trim().toLowerCase() === ADMIN_DISPLAY_NAME;
 }
 const OPPONENT_ADJUSTMENT_FACTOR = 0.25; // must match the Apps Script's WEIGHTS/formula
