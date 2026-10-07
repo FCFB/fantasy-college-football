@@ -2048,12 +2048,20 @@ const SP_ALIASES = {
   'n.c. state':'NC State','nc state':'NC State','north carolina state':'NC State',
   'central florida':'UCF','middle tennessee state':'Middle Tennessee','sam houston state':'Sam Houston',
   'western ky':'Western Kentucky','fla. atlantic':'Florida Atlantic','fau':'Florida Atlantic',
+  'va tech':'Virginia Tech','jmu':'James Madison','miss state':'Mississippi State','ndsu':'North Dakota State',
+  's carolina':'South Carolina','w virginia':'West Virginia','n carolina':'North Carolina','ga tech':'Georgia Tech',
+  'jsu':'Jacksonville State','ecu':'East Carolina','boston coll':'Boston College','ga southern':'Georgia Southern',
+  'wmu':'Western Michigan','miami oh':'Miami (OH)','la tech':'Louisiana Tech','wash state':'Washington State',
+  'ksu':'Kennesaw State','emu':'Eastern Michigan','odu':'Old Dominion','coastal caro':'Coastal Carolina',
+  's alabama':'South Alabama','shsu':'Sam Houston','nmsu':'New Mexico State','cmu':'Central Michigan',
+  'wku':'Western Kentucky','so miss':'Southern Miss','mtsu':'Middle Tennessee','sac state':'Sacramento State',
+  'bgsu':'Bowling Green','niu':'Northern Illinois','ulm':'UL Monroe','app st':'App State',
   'texas a&m':'Texas A&M','uab':'UAB','utep':'UTEP','smu':'SMU','tcu':'TCU','byu':'BYU','lsu':'LSU','ucla':'UCLA','usc':'USC','unlv':'UNLV'
 };
 let spParsed = null; // { ranks, ratings, label } — held between Preview and Save
 function spNorm(t){
   return t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
-    .replace(/[’']/g,"'").replace(/\.(?!\d)/g,'').replace(/(?<=[a-z])-(?=[a-z])/g,' ').replace(/\s+/g,' ');
+    .replace(/[’']/g,"'").replace(/\.(?!\d)/g,'').replace(/(?<=[a-z])-(?=[a-z])/g,' ').replace(/\bst\b/g,'state').replace(/\s+/g,' ');
 }
 function parseSpPaste(text){
   // name (normalized) → canonical name
@@ -2075,7 +2083,7 @@ function parseSpPaste(text){
     seen.add(h.team);
     const nextStart = hits[i+1] ? hits[i+1].start : norm.length;
     const seg = norm.slice(h.end, nextStart);
-    const num = seg.match(/-?\d+\.\d+/); // rating has a decimal; plain integers are ranks/records
+    const num = seg.match(/-?\d+(?:\.\d+)?/); // first number after the team name = its rating
     found.push({ team: h.team, rating: num ? parseFloat(num[0]) : null, order: found.length });
   });
   const allHaveRating = found.length > 0 && found.every(f => f.rating !== null);
