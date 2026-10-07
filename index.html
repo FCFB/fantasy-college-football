@@ -443,6 +443,16 @@
     padding:20px;
   }
 
+  .tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle;}
+  .fb-item{padding:12px 0;border-bottom:1px solid var(--line);}
+  .fb-meta{font-size:12px;color:var(--ink-soft);}
+  .fb-msg{font-size:14px;margin-top:3px;white-space:pre-wrap;}
+  .fb-reply{margin:8px 0 0 12px;padding:8px 12px;border-left:3px solid var(--turf);background:var(--chalk);font-size:14px;white-space:pre-wrap;}
+  .fb-reply-box{width:100%;padding:8px;border:1px solid var(--line);border-radius:var(--radius);font-family:inherit;font-size:14px;margin-top:8px;}
+  .upd-item{padding:16px 0;border-bottom:1px solid var(--line);}
+  .upd-item h3{font-size:18px;margin-bottom:2px;}
+  .upd-date{font-size:12px;color:var(--ink-soft);margin-bottom:6px;}
+  .upd-body{font-size:14px;line-height:1.5;white-space:pre-wrap;}
   /* ---------- Modals (out of picks / team info / profile) ---------- */
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(15,27,45,0.55);
@@ -539,9 +549,10 @@
     <button data-view="leaderboard" class="active">Leaderboard</button>
     <button data-view="picks">Make Picks</button>
     <button data-view="myPicks">My Picks</button>
+    <button data-view="updates">What's New<span class="tab-dot" id="updatesDot" style="display:none;"></span></button>
     <button data-view="admin">Admin</button>
     <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-      <button class="refresh-btn" id="feedbackBtn" title="Send feedback">💬 Feedback</button>
+      <button class="refresh-btn" id="feedbackBtn" title="Send feedback">💬 Feedback<span class="tab-dot" id="feedbackDot" style="display:none;"></span></button>
       <button class="refresh-btn" id="refreshBtn" title="Reload the latest data from Firestore">↻ Refresh data</button>
       <button id="logoutBtn">Log out (<span id="whoAmI"></span>)</button>
     </span>
@@ -639,9 +650,10 @@
       <textarea id="feedbackText" rows="5" placeholder="What's on your mind?" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:var(--radius);font-family:inherit;font-size:14px;margin-bottom:12px;"></textarea>
       <div id="feedbackMsg" class="hint" style="display:none;"></div>
       <div class="modal-actions">
-        <button class="btn btn-outline" id="feedbackCloseBtn">Cancel</button>
+        <button class="btn btn-outline" id="feedbackCloseBtn">Close</button>
         <button class="btn" id="feedbackSubmitBtn">Send</button>
       </div>
+      <div id="myFeedbackWrap" style="margin-top:18px;max-height:40vh;overflow-y:auto;"></div>
     </div>
   </div>
 
@@ -697,6 +709,13 @@
     <div id="myPicksWrap"></div>
   </section>
 
+  <!-- ---------------- WHAT'S NEW ---------------- -->
+  <section class="view" id="view-updates">
+    <h2 class="section-title">What's New</h2>
+    <p class="section-sub">Recent changes and improvements to the site.</p>
+    <div id="updatesWrap"></div>
+  </section>
+
   <!-- ---------------- ADMIN ---------------- -->
   <section class="view" id="view-admin">
     <h2 class="section-title">Admin</h2>
@@ -731,6 +750,29 @@ Miami, 41.05"></textarea>
         <button class="btn btn-outline" id="loadWeekScoresBtn">Load existing values for this week</button>
         <button class="btn" id="saveScoresBtn">Save team points</button>
         <span class="hint" id="saveScoresMsg"></span>
+      </fieldset>
+
+      <fieldset>
+        <legend>SP+ rankings (paste from ESPN)</legend>
+        <p class="hint" id="spStatus" style="margin-bottom:10px;"></p>
+        <label for="spPaste">Paste the SP+ table from the ESPN article (rank, team, rating…)</label>
+        <textarea id="spPaste" placeholder="1  Ohio State  29.1&#10;2  Oregon  27.4&#10;3  Georgia  26.0"></textarea>
+        <input type="text" id="spLabel" placeholder="Label, e.g. ESPN SP+ after Week 6 (optional)" style="margin-bottom:10px;">
+        <div id="spPreview" class="unmatched" style="display:none;"></div>
+        <button class="btn btn-outline" id="spParseBtn">Preview</button>
+        <button class="btn" id="spSaveBtn" disabled>Save rankings</button>
+        <button class="btn btn-outline" id="spClearBtn">Go back to CFBD API</button>
+        <span class="hint" id="spMsg"></span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Post a site update</legend>
+        <label for="updTitle">Title</label>
+        <input type="text" id="updTitle" placeholder="e.g. Feedback replies">
+        <label for="updBody">Details</label>
+        <textarea id="updBody" placeholder="What changed?"></textarea>
+        <button class="btn" id="postUpdateBtn">Post update</button>
+        <span class="hint" id="postUpdateMsg"></span>
       </fieldset>
 
       <fieldset>
@@ -816,7 +858,15 @@ const TEAM_NAMES_LC = new Map(TEAMS.map(t => [t.name.toLowerCase(), t.name]));
 /* =========================================================================
    3. STATE
    ========================================================================= */
-const ADMIN_DISPLAY_NAME = "brainner"; // only this (lowercase) display name sees Admin / Refresh data
+const ADMIN_DISPLAY_NAME = "brainner"; // fallback only, used if ADMIN_UID below is empty
+// Paste YOUR Firebase user ID here (Firebase Console → Authentication → Users → "User UID").
+// When set, Admin is tied to that exact account and no PIN is needed. The same UID
+// goes in the Firestore rules (see README). Leave "" to keep the old display-name + PIN behavior.
+const ADMIN_UID = "";
+function isAdminUser(){
+  if (ADMIN_UID) return !!currentUser && currentUser.uid === g3aVd6dcCcO8BmnZ25f0RaQCgl83;
+  return !!currentUser && (currentUser.displayName || '').trim().toLowerCase() === ADMIN_DISPLAY_NAME;
+}
 const OPPONENT_ADJUSTMENT_FACTOR = 0.25; // must match the Apps Script's WEIGHTS/formula
 const UNRANKED_OPPONENT_MULTIPLIER = 1 - OPPONENT_ADJUSTMENT_FACTOR; // flat discount vs FCS/D2 opponents — must match the backend
 let loginMode = 'signin'; // 'signin' | 'create'
@@ -967,7 +1017,7 @@ async function enterApp(){
   document.getElementById('appMain').style.display = 'block';
   document.getElementById('whoAmI').textContent = currentUser.displayName;
 
-  const isAdmin = (currentUser.displayName || '').trim().toLowerCase() === ADMIN_DISPLAY_NAME;
+  const isAdmin = isAdminUser();
   document.querySelector('[data-view="admin"]').style.display = isAdmin ? '' : 'none';
   document.getElementById('refreshBtn').style.display = isAdmin ? '' : 'none';
 
@@ -979,6 +1029,14 @@ async function enterApp(){
     await renderLeaderboard();
     await renderMyPicks();
     startCountdown();
+    checkUpdatesDot();
+    refreshFeedbackDot();
+    if (isAdmin && ADMIN_UID){
+      isAdminUnlocked = true;
+      document.getElementById('adminGate').style.display = 'none';
+      document.getElementById('adminPanel').style.display = 'grid';
+    }
+    if (isAdmin) loadSpStatus();
     if (justSignedUp){
       justSignedUp = false;
       showWelcomeModal();
@@ -1146,7 +1204,7 @@ async function loadConfig(){
   if (doc.exists){
     appConfig = Object.assign(appConfig, doc.data());
   } else {
-    await ref.set(appConfig);
+    try { await ref.set(appConfig); } catch (e) { console.warn('Could not create config/app (admin only):', e); }
   }
   document.getElementById('weekLabel').textContent = 'WEEK ' + appConfig.currentWeek;
   document.getElementById('picksWeekLabel').textContent = 'Week ' + appConfig.currentWeek;
@@ -1217,10 +1275,48 @@ function hideOutOfPicksModal(){
 function showWelcomeModal(){
   document.getElementById('welcomeModal').style.display = 'flex';
 }
-document.getElementById('feedbackBtn').addEventListener('click', () => {
+function esc(t){ return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+let myFeedbackCache = [];
+async function loadMyFeedback(){
+  try {
+    // No orderBy here (would need a composite index) — sort in the browser instead.
+    const snap = await db.collection('feedback').where('uid', '==', currentUser.uid).get();
+    myFeedbackCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a,b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  } catch (e) { console.error('Could not load my feedback:', e); myFeedbackCache = []; }
+  return myFeedbackCache;
+}
+async function refreshFeedbackDot(){
+  await loadMyFeedback();
+  document.getElementById('feedbackDot').style.display =
+    myFeedbackCache.some(f => f.hasUnreadReply) ? 'inline-block' : 'none';
+}
+function renderMyFeedback(){
+  const wrap = document.getElementById('myFeedbackWrap');
+  if (!myFeedbackCache.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<div style="font-weight:700;font-size:14px;margin-bottom:4px;">Your feedback</div>' +
+    myFeedbackCache.map(f => `
+      <div class="fb-item">
+        <div class="fb-meta">${f.createdAt ? new Date(f.createdAt).toLocaleString() : ''}</div>
+        <div class="fb-msg">${esc(f.message)}</div>
+        ${(f.replies || []).map(r => `<div class="fb-reply"><div class="fb-meta">Reply · ${r.at ? new Date(r.at).toLocaleString() : ''}</div>${esc(r.text)}</div>`).join('')}
+      </div>`).join('');
+}
+async function markFeedbackRead(){
+  const unread = myFeedbackCache.filter(f => f.hasUnreadReply);
+  for (const f of unread){
+    try { await db.collection('feedback').doc(f.id).update({ hasUnreadReply: false }); f.hasUnreadReply = false; }
+    catch (e) { console.error('Could not mark read:', e); }
+  }
+  document.getElementById('feedbackDot').style.display = 'none';
+}
+document.getElementById('feedbackBtn').addEventListener('click', async () => {
   document.getElementById('feedbackMsg').style.display = 'none';
   document.getElementById('feedbackText').value = '';
   document.getElementById('feedbackModal').style.display = 'flex';
+  await loadMyFeedback();
+  renderMyFeedback();
+  await markFeedbackRead();
 });
 document.getElementById('feedbackCloseBtn').addEventListener('click', () => {
   document.getElementById('feedbackModal').style.display = 'none';
@@ -1236,9 +1332,14 @@ document.getElementById('feedbackSubmitBtn').addEventListener('click', async () 
   try {
     await db.collection('feedback').add({
       uid: currentUser.uid, displayName: currentUser.displayName,
-      message: text, createdAt: new Date().toISOString()
+      message: text, createdAt: new Date().toISOString(),
+      replies: [], hasUnreadReply: false
     });
-    document.getElementById('feedbackModal').style.display = 'none';
+    document.getElementById('feedbackText').value = '';
+    msg.textContent = "Sent — if the admin replies, you'll see a red dot on the Feedback button.";
+    msg.style.display = 'block';
+    await loadMyFeedback();
+    renderMyFeedback();
   } catch (e) {
     console.error('Could not send feedback:', e);
     msg.textContent = 'Could not send — try again.';
@@ -1266,6 +1367,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('view-' + btn.dataset.view).classList.add('active');
   if (btn.dataset.view === 'leaderboard') renderLeaderboard();
   if (btn.dataset.view === 'myPicks') renderMyPicks();
+  if (btn.dataset.view === 'updates') renderUpdates();
 });
 document.getElementById('logoutBtn').addEventListener('click', logout);
 document.getElementById('loginBtn').addEventListener('click', handleLogin);
@@ -1837,27 +1939,215 @@ document.getElementById('saveScoresBtn').addEventListener('click', async () => {
   setTimeout(() => msg.textContent = '', 3000);
 });
 
-document.getElementById('loadFeedbackBtn').addEventListener('click', async () => {
+document.getElementById('loadFeedbackBtn').addEventListener('click', loadAdminFeedback);
+async function loadAdminFeedback(){
   const wrap = document.getElementById('feedbackListWrap');
   wrap.innerHTML = '<div class="empty-state">Loading…</div>';
   try {
     const snap = await db.collection('feedback').orderBy('createdAt', 'desc').get();
-    if (snap.empty){
-      wrap.innerHTML = '<p class="hint">No feedback yet.</p>';
-      return;
-    }
+    if (snap.empty){ wrap.innerHTML = '<p class="hint">No feedback yet.</p>'; return; }
     wrap.innerHTML = snap.docs.map(d => {
       const f = d.data();
       const when = f.createdAt ? new Date(f.createdAt).toLocaleString() : '';
-      return `<div style="padding:10px 0;border-bottom:1px solid var(--line);">
-        <div style="font-size:12px;color:var(--ink-soft);">${f.displayName || 'Someone'} · ${when}</div>
-        <div style="font-size:14px;margin-top:3px;">${(f.message || '').replace(/</g,'&lt;')}</div>
+      const replies = (f.replies || []).map(r =>
+        `<div class="fb-reply"><div class="fb-meta">Your reply · ${r.at ? new Date(r.at).toLocaleString() : ''}</div>${esc(r.text)}</div>`).join('');
+      return `<div class="fb-item" data-fb-id="${d.id}">
+        <div class="fb-meta">${esc(f.displayName || 'Someone')} · ${when}</div>
+        <div class="fb-msg">${esc(f.message)}</div>
+        ${replies}
+        <textarea class="fb-reply-box" rows="2" placeholder="Reply privately to ${esc(f.displayName || 'this person')}…"></textarea>
+        <button class="btn btn-outline fb-reply-send" style="margin-top:6px;">Send reply</button>
       </div>`;
     }).join('');
+    wrap.querySelectorAll('.fb-reply-send').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const item = btn.closest('.fb-item');
+        const box = item.querySelector('.fb-reply-box');
+        const text = box.value.trim();
+        if (!text) return;
+        btn.disabled = true;
+        try {
+          await db.collection('feedback').doc(item.dataset.fbId).update({
+            replies: firebase.firestore.FieldValue.arrayUnion({ text, at: new Date().toISOString() }),
+            hasUnreadReply: true
+          });
+          await loadAdminFeedback();
+        } catch (e) {
+          console.error('Could not send reply:', e);
+          btn.disabled = false;
+          alert('Could not send the reply — check the console (and that the Firestore rules are published).');
+        }
+      });
+    });
   } catch (e) {
     console.error('Could not load feedback:', e);
     wrap.innerHTML = '<p class="hint">Could not load feedback — check the console.</p>';
   }
+}
+
+/* ---------- What's New ---------- */
+const UPDATES_SEEN_KEY = 'fcf_updates_seen';
+let updatesCache = [];
+async function loadUpdates(){
+  try {
+    const snap = await db.collection('updates').orderBy('createdAt', 'desc').limit(50).get();
+    updatesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) { console.error('Could not load updates:', e); updatesCache = []; }
+  return updatesCache;
+}
+async function checkUpdatesDot(){
+  await loadUpdates();
+  let seen = '';
+  try { seen = localStorage.getItem(UPDATES_SEEN_KEY) || ''; } catch (e) {}
+  const newest = updatesCache.length ? updatesCache[0].createdAt : '';
+  document.getElementById('updatesDot').style.display = (newest && newest > seen) ? 'inline-block' : 'none';
+}
+async function renderUpdates(){
+  const wrap = document.getElementById('updatesWrap');
+  wrap.innerHTML = '<div class="empty-state">Loading…</div>';
+  await loadUpdates();
+  if (!updatesCache.length){ wrap.innerHTML = '<div class="empty-state">No updates posted yet.</div>'; return; }
+  wrap.innerHTML = updatesCache.map(u => `
+    <div class="upd-item">
+      <h3>${esc(u.title)}</h3>
+      <div class="upd-date">${u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : ''}</div>
+      <div class="upd-body">${esc(u.body)}</div>
+    </div>`).join('');
+  try { localStorage.setItem(UPDATES_SEEN_KEY, updatesCache[0].createdAt); } catch (e) {}
+  document.getElementById('updatesDot').style.display = 'none';
+}
+document.getElementById('postUpdateBtn').addEventListener('click', async () => {
+  const title = document.getElementById('updTitle').value.trim();
+  const body = document.getElementById('updBody').value.trim();
+  const msg = document.getElementById('postUpdateMsg');
+  if (!title){ msg.textContent = 'Add a title.'; return; }
+  try {
+    await db.collection('updates').add({ title, body, createdAt: new Date().toISOString() });
+    document.getElementById('updTitle').value = '';
+    document.getElementById('updBody').value = '';
+    msg.textContent = 'Posted.';
+    checkUpdatesDot();
+  } catch (e) {
+    console.error('Could not post update:', e);
+    msg.textContent = 'Could not post — check the console / Firestore rules.';
+  }
+  setTimeout(() => msg.textContent = '', 3000);
+});
+
+/* ---------- SP+ rankings: paste from ESPN ---------- */
+// ESPN/CFBD name differences → the names this site (and CFBD) use.
+const SP_ALIASES = {
+  'miami (fl)':'Miami','miami (fla)':'Miami','miami fl':'Miami','miami florida':'Miami',
+  'miami (ohio)':'Miami (OH)','miami ohio':'Miami (OH)','miami (oh)':'Miami (OH)',
+  'hawaii':"Hawai'i","hawai'i":"Hawai'i",'san jose state':'San José State',
+  'louisiana monroe':'UL Monroe','louisiana-monroe':'UL Monroe','ul monroe':'UL Monroe',
+  'umass':'Massachusetts','appalachian state':'App State','connecticut':'UConn',
+  'usf':'South Florida','fiu':'Florida International','florida intl':'Florida International',
+  'southern mississippi':'Southern Miss','louisiana lafayette':'Louisiana','louisiana-lafayette':'Louisiana',
+  'texas-san antonio':'UTSA','mississippi':'Ole Miss','pitt':'Pittsburgh',
+  'n.c. state':'NC State','nc state':'NC State','north carolina state':'NC State',
+  'central florida':'UCF','middle tennessee state':'Middle Tennessee','sam houston state':'Sam Houston',
+  'western ky':'Western Kentucky','fla. atlantic':'Florida Atlantic','fau':'Florida Atlantic',
+  'texas a&m':'Texas A&M','uab':'UAB','utep':'UTEP','smu':'SMU','tcu':'TCU','byu':'BYU','lsu':'LSU','ucla':'UCLA','usc':'USC','unlv':'UNLV'
+};
+let spParsed = null; // { ranks, ratings, label } — held between Preview and Save
+function spNorm(t){
+  return t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()
+    .replace(/[’']/g,"'").replace(/\.(?!\d)/g,'').replace(/(?<=[a-z])-(?=[a-z])/g,' ').replace(/\s+/g,' ');
+}
+function parseSpPaste(text){
+  // name (normalized) → canonical name
+  const lookup = new Map();
+  TEAMS.forEach(t => lookup.set(spNorm(t.name), t.name));
+  Object.entries(SP_ALIASES).forEach(([k,v]) => lookup.set(spNorm(k), v));
+  const keys = Array.from(lookup.keys()).sort((a,b) => b.length - a.length)
+    .map(k => k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  const re = new RegExp("(?<![a-z0-9])(" + keys.join('|') + ")(?![a-z0-9])", 'g');
+  const norm = spNorm(text);
+  const hits = []; // in order of appearance
+  let m;
+  while ((m = re.exec(norm))){
+    hits.push({ team: lookup.get(m[1]), start: m.index, end: m.index + m[0].length });
+  }
+  const seen = new Set(), found = [];
+  hits.forEach((h,i) => {
+    if (seen.has(h.team)) return;
+    seen.add(h.team);
+    const nextStart = hits[i+1] ? hits[i+1].start : norm.length;
+    const seg = norm.slice(h.end, nextStart);
+    const num = seg.match(/-?\d+\.\d+/); // rating has a decimal; plain integers are ranks/records
+    found.push({ team: h.team, rating: num ? parseFloat(num[0]) : null, order: found.length });
+  });
+  const allHaveRating = found.length > 0 && found.every(f => f.rating !== null);
+  const sorted = found.slice().sort((a,b) =>
+    allHaveRating ? (b.rating - a.rating || a.order - b.order) : a.order - b.order);
+  const ranks = {}, ratings = {};
+  sorted.forEach((f,i) => { ranks[f.team] = i + 1; if (f.rating !== null) ratings[f.team] = f.rating; });
+  const missing = TEAMS.map(t => t.name).filter(n => !(n in ranks));
+  return { ranks, ratings, matched: sorted.length, missing, usedRatings: allHaveRating };
+}
+async function loadSpStatus(){
+  const el = document.getElementById('spStatus');
+  try {
+    const doc = await db.collection('config').doc('spOverride').get();
+    const d = doc.exists ? doc.data() : null;
+    if (d && d.active){
+      el.textContent = `Currently using pasted rankings: ${d.label || 'unlabeled'} (saved ${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '?'}). The Apps Script uses these instead of CFBD until you switch back.`;
+    } else {
+      el.textContent = 'Currently using CFBD API rankings (via the Apps Script).';
+    }
+  } catch (e) { el.textContent = ''; }
+}
+document.getElementById('spParseBtn').addEventListener('click', () => {
+  const box = document.getElementById('spPreview');
+  const saveBtn = document.getElementById('spSaveBtn');
+  const r = parseSpPaste(document.getElementById('spPaste').value);
+  spParsed = null; saveBtn.disabled = true;
+  box.style.display = 'block';
+  if (r.matched < 100){
+    box.innerHTML = `<strong>Only matched ${r.matched} teams</strong> — expected about 130+. Make sure you copied the whole table.` +
+      (r.matched ? '<br>Not found: ' + esc(r.missing.slice(0,40).join(', ')) : '');
+    return;
+  }
+  const top = Object.entries(r.ranks).sort((a,b) => a[1]-b[1]).slice(0,5).map(([t,k]) => `${k}. ${t}`).join(' · ');
+  box.innerHTML = `<strong>Matched ${r.matched} teams</strong> (${r.usedRatings ? 'ranked by rating' : 'ranked by table order'}). Top 5: ${esc(top)}` +
+    (r.missing.length ? `<br><strong>${r.missing.length} not in the paste</strong> — they'll keep their current order below the pasted teams: ${esc(r.missing.join(', '))}` : '');
+  spParsed = r;
+  saveBtn.disabled = false;
+});
+document.getElementById('spSaveBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('spMsg');
+  if (!spParsed) return;
+  const ranks = Object.assign({}, spParsed.ranks);
+  // Teams missing from the paste: append after the pasted ones in their previous order.
+  let next = Object.keys(ranks).length + 1;
+  spParsed.missing
+    .sort((a,b) => (teamRanksCache[a] ?? 9999) - (teamRanksCache[b] ?? 9999))
+    .forEach(n => { ranks[n] = next++; });
+  const rankSpread = Object.keys(ranks).length - 1;
+  try {
+    await db.collection('config').doc('spOverride').set({
+      active: true, ranks, ratings: spParsed.ratings, rankSpread,
+      label: document.getElementById('spLabel').value.trim(), updatedAt: new Date().toISOString()
+    });
+    await db.collection('config').doc('teamRanks').set({ ranks }, { merge: true });
+    teamRanksCache = ranks;
+    renderTeamList(document.getElementById('teamSearch').value);
+    msg.textContent = 'Saved — site updated now; the Apps Script will use these on its next sync.';
+    spParsed = null; document.getElementById('spSaveBtn').disabled = true;
+    loadSpStatus();
+  } catch (e) {
+    console.error('Could not save SP+ rankings:', e);
+    msg.textContent = 'Could not save — check the console / Firestore rules.';
+  }
+});
+document.getElementById('spClearBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('spMsg');
+  try {
+    await db.collection('config').doc('spOverride').set({ active: false, updatedAt: new Date().toISOString() });
+    msg.textContent = 'Switched back to CFBD. Run syncRankingsOnly in Apps Script to refresh ranks.';
+    loadSpStatus();
+  } catch (e) { console.error(e); msg.textContent = 'Could not switch — check the console.'; }
 });
 
 /* =========================================================================
