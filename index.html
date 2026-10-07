@@ -766,6 +766,13 @@ Miami, 41.05"></textarea>
       </fieldset>
 
       <fieldset>
+        <legend>Leaderboard</legend>
+        <p class="hint" style="margin-bottom:10px;">The leaderboard is precomputed after each Apps Script sync. Rebuild it here after pasting team points by hand, or to show new players right away.</p>
+        <button class="btn btn-outline" id="rebuildLbBtn">Rebuild leaderboard now</button>
+        <span class="hint" id="rebuildLbMsg"></span>
+      </fieldset>
+
+      <fieldset>
         <legend>Post a site update</legend>
         <label for="updTitle">Title</label>
         <input type="text" id="updTitle" placeholder="e.g. Feedback replies">
@@ -793,7 +800,7 @@ Miami, 41.05"></textarea>
       Firebase Console → Project settings → Your apps → SDK setup and config.
    ========================================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
+ apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
   authDomain: "fantasy-college-football.firebaseapp.com",
   projectId: "fantasy-college-football",
   storageBucket: "fantasy-college-football.firebasestorage.app",
@@ -1066,9 +1073,9 @@ async function loadTeamScores(force){
 }
 async function loadSchedule(force){
   if (scheduleCache.length && !force) return scheduleCache;
-  const snap = await db.collection('schedule').get();
+  const snap = await db.collection('scheduleByWeek').get(); // one doc per week
   const arr = [];
-  snap.forEach(d => arr.push(d.data()));
+  snap.forEach(d => (d.data().entries || []).forEach(e => arr.push(e)));
   scheduleCache = arr;
   return arr;
 }
@@ -1408,7 +1415,7 @@ function renderTeamList(filter){
   const wrap = document.getElementById('teamList');
   wrap.innerHTML = '';
   const f = (filter || '').toLowerCase();
-  const eligible = TEAMS.filter(t => teamPlayingThisWeek(t.name) && t.name.toLowerCase().includes(f));
+  const eligible = TEAMS.filter(t => t.name.toLowerCase().includes(f)); // bye-week teams stay in the list, grayed out
 
   if (!TEAMS.some(t => teamPlayingThisWeek(t.name))){
     wrap.innerHTML = `<div class="empty-state">No teams available for this week yet. Check back once the schedule has synced for Week ${appConfig.currentWeek}.</div>`;
@@ -1420,15 +1427,18 @@ function renderTeamList(filter){
   }
 
   const atMax = selectedTeams.size >= 5;
-  sortedTeams(eligible, picksSortMode).forEach(t => {
+  const sortedList = sortedTeams(eligible, picksSortMode);
+  const ordered = sortedList.filter(t => teamPlayingThisWeek(t.name)).concat(sortedList.filter(t => !teamPlayingThisWeek(t.name))); // byes sink to the bottom
+  ordered.forEach(t => {
     const entry = currentWeekEntry(t.name);
+    const isBye = !entry;
     const proj = projectedScoreFor(t.name);
     const mult = entry ? computeMultiplierClient(teamRank(t.name), entry.opponentRank) : 1;
     const oppText = entry
       ? `${entry.home ? 'vs' : '@'} ${entry.opponent}${typeof entry.opponentRank === 'number' ? ' (#'+entry.opponentRank+')' : ''}`
-      : 'No game this week';
+      : 'Bye week';
     const isSelected = selectedTeams.has(t.name);
-    const locked = isTeamKickoffLocked(t.name);
+    const locked = isBye || isTeamKickoffLocked(t.name);
     const logo = teamLogosCache[t.name];
 
     const row = document.createElement('div');
@@ -1447,10 +1457,10 @@ function renderTeamList(filter){
           <span class="pick-card-proj">${proj ? proj.projected.toFixed(1) : '—'}</span>
           <span class="pick-card-proj-label">Projected</span>
         </div>
-        <div class="pick-card-meta">${oppText} · opponent multiplier ×${mult.toFixed(2)}</div>
+        <div class="pick-card-meta">${isBye ? 'Bye week' : `${oppText} · opponent multiplier ×${mult.toFixed(2)}`}</div>
         <div class="pick-card-actions">
           ${locked
-            ? `<span class="lock-tag">${isSelected ? 'Locked — in lineup' : 'Kickoff started'}</span>`
+            ? `<span class="lock-tag">${isBye ? 'Bye' : (isSelected ? 'Locked — in lineup' : 'Kickoff started')}</span>`
             : `<button type="button" class="select-btn">${isSelected ? 'Selected' : 'Select'}</button>`}
           <button type="button" class="team-info-btn">Team Info</button>
         </div>
@@ -1801,35 +1811,13 @@ async function renderLeaderboard(){
   const body = document.getElementById('leaderboardBody');
   body.innerHTML = '<tr><td colspan="5"><div class="empty-state">Loading the leaderboard…</div></td></tr>';
 
-  const [picksSnap] = await Promise.all([
-    db.collection('picks').get(),
-    loadTeamScores()
-  ]);
-  const scoresByWeek = teamScoresCache;
+  // One read: the leaderboard doc precomputed by the Apps Script (or Admin → Rebuild).
+  let rows = [];
+  try {
+    const doc = await db.collection('leaderboard').doc('current').get();
+    rows = doc.exists ? (doc.data().rows || []) : [];
+  } catch (e) { console.error('Could not load leaderboard:', e); }
 
-  // "Last week" = the most recent week that actually has scores in it.
-  const scoredWeeks = Object.keys(scoresByWeek)
-    .map(Number)
-    .filter(w => Object.keys(scoresByWeek[w] || {}).length > 0);
-  const lastWeek = scoredWeeks.length ? Math.max(...scoredWeeks) : null;
-
-  const totals = {}; // uid -> { displayName, total, lastWeekPts, weeks: Set }
-  picksSnap.forEach(d => {
-    const p = d.data();
-    if (!p.uid) return; // leftover doc from the old username-keyed system — not a real account, skip it
-    const scores = scoresByWeek[String(p.week)] || {};
-    const weekTotal = p.teams.reduce((sum,t) => sum + (typeof scores[t] === 'number' ? scores[t] : 0), 0);
-    if (!totals[p.uid]) totals[p.uid] = { displayName: p.displayName || 'Player', total: 0, lastWeekPts: null, weeks: new Set() };
-    totals[p.uid].total += weekTotal;
-    totals[p.uid].weeks.add(p.week);
-    if (lastWeek !== null && p.week === lastWeek){
-      totals[p.uid].lastWeekPts = weekTotal;
-    }
-  });
-
-  const rows = Object.entries(totals)
-    .map(([uid, v]) => ({ uid, ...v }))
-    .sort((a,b) => b.total - a.total);
 
   if (rows.length === 0){
     body.innerHTML = '<tr><td colspan="5"><div class="empty-state">No scores yet — once picks are in and a week is synced, the leaderboard will fill in here.</div></td></tr>';
@@ -1839,8 +1827,8 @@ async function renderLeaderboard(){
   body.innerHTML = rows.map((r,i) => `
     <tr class="leaderboard-row ${r.uid === currentUser.uid ? 'me' : ''}" data-row-index="${i}">
       <td class="rank-num ${i<3?'top3':''}">${i+1}</td>
-      <td>${r.displayName}</td>
-      <td class="weeks-played">${r.weeks.size}</td>
+      <td>${esc(r.displayName)}</td>
+      <td class="weeks-played">${r.weeks}</td>
       <td class="pts-cell"><span class="last-wk-pts">${r.lastWeekPts != null ? r.lastWeekPts.toFixed(1) : '—'}</span></td>
       <td class="pts-cell"><span class="pts">${r.total.toFixed(1)}</span></td>
     </tr>
@@ -1849,7 +1837,7 @@ async function renderLeaderboard(){
   body.querySelectorAll('.leaderboard-row').forEach(row => {
     const r = rows[Number(row.dataset.rowIndex)];
     row.addEventListener('click', () => {
-      openProfileModal(r.uid, r.displayName, r.total, r.weeks.size, r.lastWeekPts);
+      openProfileModal(r.uid, r.displayName, r.total, r.weeks, r.lastWeekPts);
     });
   });
 }
@@ -1984,6 +1972,38 @@ async function loadAdminFeedback(){
     wrap.innerHTML = '<p class="hint">Could not load feedback — check the console.</p>';
   }
 }
+
+document.getElementById('rebuildLbBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('rebuildLbMsg');
+  msg.textContent = 'Rebuilding…';
+  try {
+    const [picksSnap] = await Promise.all([db.collection('picks').get(), loadTeamScores(true)]);
+    const scoresByWeek = teamScoresCache;
+    const scoredWeeks = Object.keys(scoresByWeek).map(Number).filter(w => Object.keys(scoresByWeek[w] || {}).length > 0);
+    const lastWeek = scoredWeeks.length ? Math.max(...scoredWeeks) : null;
+    const totals = {};
+    picksSnap.forEach(d => {
+      const p = d.data();
+      if (!p.uid || !Array.isArray(p.teams)) return;
+      const scores = scoresByWeek[String(p.week)] || {};
+      const wt = p.teams.reduce((sum,t) => sum + (typeof scores[t] === 'number' ? scores[t] : 0), 0);
+      if (!totals[p.uid]) totals[p.uid] = { uid: p.uid, displayName: p.displayName || 'Player', total: 0, lastWeekPts: null, weeks: 0 };
+      totals[p.uid].total += wt;
+      totals[p.uid].weeks += 1;
+      if (lastWeek !== null && Number(p.week) === lastWeek) totals[p.uid].lastWeekPts = wt;
+    });
+    const rows = Object.values(totals).map(r => ({
+      ...r, total: Math.round(r.total*100)/100,
+      lastWeekPts: r.lastWeekPts === null ? null : Math.round(r.lastWeekPts*100)/100
+    })).sort((a,b) => b.total - a.total);
+    await db.collection('leaderboard').doc('current').set({ rows, lastWeek, updatedAt: new Date().toISOString() });
+    msg.textContent = `Rebuilt — ${rows.length} players.`;
+    renderLeaderboard();
+  } catch (e) {
+    console.error('Could not rebuild leaderboard:', e);
+    msg.textContent = 'Could not rebuild — check the console.';
+  }
+});
 
 /* ---------- What's New ---------- */
 const UPDATES_SEEN_KEY = 'fcf_updates_seen';
