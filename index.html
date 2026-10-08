@@ -443,6 +443,16 @@
     padding:20px;
   }
 
+  .mode-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:16px;}
+  .mode-card{border:1px solid var(--line);border-radius:var(--radius);padding:20px;background:var(--paper);display:flex;flex-direction:column;gap:10px;}
+  .mode-card h3{font-size:22px;}
+  .mode-card p{font-size:14px;line-height:1.5;color:var(--ink-soft);}
+  .mode-card.soon{background:var(--chalk);}
+  .mode-badge{align-self:flex-start;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:var(--turf);color:#fff;}
+  .mode-card.soon .mode-badge{background:var(--ink-soft);}
+  .brand{cursor:pointer;}
+  body.on-home .week-block,
+  body.on-home nav.tabs button[data-view]{display:none !important;}
   .tab-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle;}
   .fb-item{padding:12px 0;border-bottom:1px solid var(--line);}
   .fb-meta{font-size:12px;color:var(--ink-soft);}
@@ -527,7 +537,7 @@
   }
 </style>
 </head>
-<body>
+<body class="on-home">
 
 <!-- Shown only if firebaseConfig hasn't been filled in -->
 <div id="setupBanner" class="setup-banner" style="display:none;">
@@ -539,14 +549,14 @@
 
 <header class="bar" id="appHeader" style="display:none;">
   <div class="bar-top">
-    <div class="brand">Fantasy <span>College Football</span></div>
+    <div class="brand" id="brandHome" title="Home">Fantasy <span>College Football</span></div>
     <div class="week-block" id="weekBlock">
       <strong id="weekLabel">Loading week…</strong>
       <span id="weekDateRange"></span>
     </div>
   </div>
   <nav class="tabs" id="tabs">
-    <button data-view="leaderboard" class="active">Leaderboard</button>
+    <button data-view="leaderboard">Leaderboard</button>
     <button data-view="picks">Make Picks</button>
     <button data-view="myPicks">My Picks</button>
     <button data-view="updates">What's New<span class="tab-dot" id="updatesDot" style="display:none;"></span></button>
@@ -590,7 +600,30 @@
 <main id="appMain" style="display:none;">
 
   <!-- ---------------- LEADERBOARD ---------------- -->
-  <section class="view active" id="view-leaderboard">
+  <!-- ---------------- HOME (mode picker) ---------------- -->
+  <section class="view active" id="view-home">
+    <h2 class="section-title">Choose your game</h2>
+    <p class="section-sub">Two ways to play. Your account works in both.</p>
+    <div class="mode-grid">
+      <div class="mode-card">
+        <span class="mode-badge">Playing now</span>
+        <h3>The Ladder</h3>
+        <p>Pick 5 teams every week. They score points from real stats — yards, touchdowns, turnovers — adjusted for opponent strength. Everyone shares one global leaderboard.</p>
+        <button class="btn" id="homePlayLadderBtn">Make this week's picks</button>
+        <button class="btn btn-outline" id="homeLeaderboardBtn">View leaderboard</button>
+      </div>
+      <div class="mode-card soon">
+        <span class="mode-badge">Coming 2027</span>
+        <h3>Leagues</h3>
+        <p>Start a public or private league, hold a live draft and build a roster, like real fantasy football. Want in when it opens?</p>
+        <button class="btn" id="leaguesInterestBtn">Notify me</button>
+        <p id="leaguesInterestMsg" style="font-size:13px;"></p>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-outline" id="homeUpdatesBtn">What's New<span class="tab-dot" id="homeUpdatesDot" style="display:none;"></span></button><button class="btn btn-outline" id="homeAdminBtn" style="display:none;">Admin panel</button></div>
+  </section>
+
+  <section class="view" id="view-leaderboard">
     <h2 class="section-title">Leaderboard</h2>
     <p class="section-sub">Every player, every week, one list. Points are the sum of your five picks' fantasy points across all weeks played.</p>
     <div id="leaderboardWrap">
@@ -770,6 +803,12 @@ Miami, 41.05"></textarea>
         <p class="hint" style="margin-bottom:10px;">The leaderboard is precomputed after each Apps Script sync. Rebuild it here after pasting team points by hand, or to show new players right away.</p>
         <button class="btn btn-outline" id="rebuildLbBtn">Rebuild leaderboard now</button>
         <span class="hint" id="rebuildLbMsg"></span>
+      </fieldset>
+
+      <fieldset>
+        <legend>Leagues interest</legend>
+        <button class="btn btn-outline" id="leaguesCountBtn">Count sign-ups</button>
+        <span class="hint" id="leaguesCountMsg"></span>
       </fieldset>
 
       <fieldset>
@@ -1024,7 +1063,9 @@ async function enterApp(){
   document.getElementById('appMain').style.display = 'block';
   document.getElementById('whoAmI').textContent = currentUser.displayName;
 
+  showHome();
   const isAdmin = isAdminUser();
+  document.getElementById('homeAdminBtn').style.display = isAdminUser() ? '' : 'none';
   document.querySelector('[data-view="admin"]').style.display = isAdmin ? '' : 'none';
   document.getElementById('refreshBtn').style.display = isAdmin ? '' : 'none';
 
@@ -1036,6 +1077,7 @@ async function enterApp(){
     await renderLeaderboard();
     await renderMyPicks();
     startCountdown();
+    loadLeaguesInterest();
     checkUpdatesDot();
     refreshFeedbackDot();
     if (isAdmin && ADMIN_UID){
@@ -2005,6 +2047,59 @@ document.getElementById('rebuildLbBtn').addEventListener('click', async () => {
   }
 });
 
+/* ---------- Home: mode picker + Leagues waitlist ---------- */
+function goToView(name){
+  document.body.classList.remove('on-home');
+  document.querySelector('nav.tabs button[data-view="' + name + '"]').click();
+}
+function showHome(){
+  document.body.classList.add('on-home');
+  document.querySelectorAll('nav.tabs button[data-view]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-home').classList.add('active');
+  window.scrollTo(0, 0);
+}
+document.getElementById('brandHome').addEventListener('click', showHome);
+document.getElementById('homeUpdatesBtn').addEventListener('click', () => goToView('updates'));
+document.getElementById('homeAdminBtn').addEventListener('click', () => goToView('admin'));
+document.getElementById('homePlayLadderBtn').addEventListener('click', () => goToView('picks'));
+document.getElementById('homeLeaderboardBtn').addEventListener('click', () => goToView('leaderboard'));
+let onLeaguesList = false;
+function paintLeaguesButton(){
+  const btn = document.getElementById('leaguesInterestBtn');
+  btn.textContent = onLeaguesList ? "✓ You're on the list" : 'Notify me';
+  btn.classList.toggle('btn-outline', onLeaguesList);
+  document.getElementById('leaguesInterestMsg').textContent = onLeaguesList
+    ? "We'll post in What's New when Leagues open. Tap again to leave the list."
+    : "We'll post in What's New when Leagues open.";
+}
+async function loadLeaguesInterest(){
+  try {
+    const doc = await db.collection('leagueInterest').doc(currentUser.uid).get();
+    onLeaguesList = doc.exists;
+  } catch (e) { console.error('Could not load Leagues interest:', e); }
+  paintLeaguesButton();
+}
+document.getElementById('leaguesInterestBtn').addEventListener('click', async () => {
+  const ref = db.collection('leagueInterest').doc(currentUser.uid);
+  try {
+    if (onLeaguesList) await ref.delete();
+    else await ref.set({ uid: currentUser.uid, displayName: currentUser.displayName, createdAt: new Date().toISOString() });
+    onLeaguesList = !onLeaguesList;
+    paintLeaguesButton();
+  } catch (e) {
+    console.error('Could not update Leagues interest:', e);
+    document.getElementById('leaguesInterestMsg').textContent = 'Could not save — try again.';
+  }
+});
+document.getElementById('leaguesCountBtn').addEventListener('click', async () => {
+  const msg = document.getElementById('leaguesCountMsg');
+  try {
+    const snap = await db.collection('leagueInterest').get();
+    msg.textContent = snap.size + ' signed up for Leagues.';
+  } catch (e) { console.error(e); msg.textContent = 'Could not count — check the console / rules.'; }
+});
+
 /* ---------- What's New ---------- */
 const UPDATES_SEEN_KEY = 'fcf_updates_seen';
 let updatesCache = [];
@@ -2020,7 +2115,9 @@ async function checkUpdatesDot(){
   let seen = '';
   try { seen = localStorage.getItem(UPDATES_SEEN_KEY) || ''; } catch (e) {}
   const newest = updatesCache.length ? updatesCache[0].createdAt : '';
-  document.getElementById('updatesDot').style.display = (newest && newest > seen) ? 'inline-block' : 'none';
+  const showDot = (newest && newest > seen) ? 'inline-block' : 'none';
+  document.getElementById('updatesDot').style.display = showDot;
+  document.getElementById('homeUpdatesDot').style.display = showDot;
 }
 async function renderUpdates(){
   const wrap = document.getElementById('updatesWrap');
@@ -2035,6 +2132,7 @@ async function renderUpdates(){
     </div>`).join('');
   try { localStorage.setItem(UPDATES_SEEN_KEY, updatesCache[0].createdAt); } catch (e) {}
   document.getElementById('updatesDot').style.display = 'none';
+  document.getElementById('homeUpdatesDot').style.display = 'none';
 }
 document.getElementById('postUpdateBtn').addEventListener('click', async () => {
   const title = document.getElementById('updTitle').value.trim();
