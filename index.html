@@ -800,7 +800,7 @@ Miami, 41.05"></textarea>
       Firebase Console → Project settings → Your apps → SDK setup and config.
    ========================================================================= */
 const firebaseConfig = {
- apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
+  apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
   authDomain: "fantasy-college-football.firebaseapp.com",
   projectId: "fantasy-college-football",
   storageBucket: "fantasy-college-football.firebasestorage.app",
@@ -982,7 +982,7 @@ async function handleLogin(){
       const cred = await auth.createUserWithEmailAndPassword(email, password);
       await cred.user.updateProfile({ displayName });
       await db.collection('users').doc(cred.user.uid).set({
-        email, displayName, createdAt: new Date().toISOString()
+        displayName, createdAt: new Date().toISOString() // no email: this collection is publicly readable
       });
       justSignedUp = true;
       // onAuthStateChanged fires from here and calls enterApp()
