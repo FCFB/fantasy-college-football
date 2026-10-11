@@ -846,7 +846,7 @@ Miami, 41.05"></textarea>
       Firebase Console → Project settings → Your apps → SDK setup and config.
    ========================================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
+    apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
   authDomain: "fantasy-college-football.firebaseapp.com",
   projectId: "fantasy-college-football",
   storageBucket: "fantasy-college-football.firebasestorage.app",
@@ -915,7 +915,7 @@ const ADMIN_DISPLAY_NAME = "brainner"; // fallback only, used if ADMIN_UID below
 // Paste YOUR Firebase user ID here (Firebase Console → Authentication → Users → "User UID").
 // When set, Admin is tied to that exact account and no PIN is needed. The same UID
 // goes in the Firestore rules (see README). Leave "" to keep the old display-name + PIN behavior.
-const ADMIN_UID = "g3aVd6dcCcO8BmnZ25f0RaQCgl83";
+const ADMIN_UID = "fantasy-college-football";
 function isAdminUser(){
   if (ADMIN_UID) return !!currentUser && currentUser.uid === ADMIN_UID;
   return !!currentUser && (currentUser.displayName || '').trim().toLowerCase() === ADMIN_DISPLAY_NAME;
@@ -2173,6 +2173,8 @@ const SP_ALIASES = {
   'n.c. state':'NC State','nc state':'NC State','north carolina state':'NC State',
   'central florida':'UCF','middle tennessee state':'Middle Tennessee','sam houston state':'Sam Houston',
   'western ky':'Western Kentucky','fla. atlantic':'Florida Atlantic','fau':'Florida Atlantic',
+  'n dakota st':'North Dakota State',"j'ville st":'Jacksonville State','jville st':'Jacksonville State',
+  'kennesaw':'Kennesaw State','n mex st':'New Mexico State','n illinois':'Northern Illinois',
   'va tech':'Virginia Tech','jmu':'James Madison','miss state':'Mississippi State','ndsu':'North Dakota State',
   's carolina':'South Carolina','w virginia':'West Virginia','n carolina':'North Carolina','ga tech':'Georgia Tech',
   'jsu':'Jacksonville State','ecu':'East Carolina','boston coll':'Boston College','ga southern':'Georgia Southern',
