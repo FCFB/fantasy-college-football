@@ -522,7 +522,14 @@
     table.board th, table.board td{padding:9px 6px; font-size:13px;}
     .pts{font-size:21px;}
     .last-wk-pts{font-size:13px;}
-    .weeks-played{display:none;} /* least essential column — reclaim space for Last Wk / Total */
+    /* keep all 5 leaderboard columns on phones: tighten them instead of hiding one */
+    #leaderboardWrap table.board{width:100%; table-layout:fixed;}
+    #leaderboardWrap th:nth-child(1), #leaderboardWrap td:nth-child(1){width:26px;}
+    #leaderboardWrap th:nth-child(3), #leaderboardWrap td:nth-child(3){width:52px; text-align:center;}
+    #leaderboardWrap th:nth-child(4), #leaderboardWrap td:nth-child(4){width:62px;}
+    #leaderboardWrap th:nth-child(5), #leaderboardWrap td:nth-child(5){width:74px;}
+    #leaderboardWrap td:nth-child(2){overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+    #leaderboardWrap .pts{font-size:19px;}
     .pick-card-name{font-size:15px;}
     .pick-card-proj{font-size:24px;}
     .pick-card-actions{gap:6px;}
@@ -628,7 +635,7 @@
     <p class="section-sub">Every player, every week, one list. Points are the sum of your five picks' fantasy points across all weeks played.</p>
     <div id="leaderboardWrap">
       <table class="board">
-        <thead><tr><th>#</th><th>Player</th><th>Weeks</th><th style="text-align:right;">Last Wk</th><th style="text-align:right;">Total</th></tr></thead>
+        <thead><tr><th>#</th><th>Player</th><th class="weeks-col">Weeks</th><th style="text-align:right;">Last Wk</th><th style="text-align:right;">Total</th></tr></thead>
         <tbody id="leaderboardBody"></tbody>
       </table>
     </div>
