@@ -1226,7 +1226,7 @@ function projectedScoreFor(team){
   if (base == null) return null;
   const entry = currentWeekEntry(team);
   const multiplier = entry ? computeMultiplierClient(teamRank(team), entry.opponentRank) : 1;
-  return { base, multiplier, projected: base * multiplier, opponentEntry: entry };
+  return { base, multiplier, projected: base / multiplier, opponentEntry: entry }; // divided: facing a stronger team lowers the projection (backtested best)
 }
 function openTeamInfoModal(team){
   document.getElementById('teamInfoModal').style.display = 'flex';
@@ -1706,7 +1706,7 @@ function renderProjectionBreakdown(team){
   if (!proj) return '<p class="hint">No projection available.</p>';
   return `<div class="breakdown-box">
     <div class="breakdown-line"><span>Recency-weighted base</span><span>${proj.base.toFixed(2)}</span></div>
-    <div class="breakdown-line"><span>Opponent multiplier</span><span>×${proj.multiplier.toFixed(3)}</span></div>
+    <div class="breakdown-line"><span>Opponent multiplier (divides the base)</span><span>÷${proj.multiplier.toFixed(3)}</span></div>
     <div class="breakdown-line breakdown-final"><span>Projected score</span><span>${proj.projected.toFixed(2)}</span></div>
     <p class="hint" style="margin-top:8px;">This week hasn't been scored yet — this is a live projection, not a final stat breakdown.</p>
   </div>`;
@@ -1795,7 +1795,7 @@ function showTeamDetail(team){
       <div class="stat-card">
         <span class="stat-card-label">Projected This Week</span>
         <span class="stat-card-value">${proj != null ? proj.projected.toFixed(1) : '—'}</span>
-        <span class="stat-card-sub">${proj != null ? `${proj.base.toFixed(1)} base × ${proj.multiplier.toFixed(2)} mult.` : 'No history yet'}</span>
+        <span class="stat-card-sub">${proj != null ? `${proj.base.toFixed(1)} base ÷ ${proj.multiplier.toFixed(2)} mult.` : 'No history yet'}</span>
         <span class="stat-card-sub">${opponentText}</span>
       </div>
     </div>
@@ -2069,8 +2069,8 @@ document.getElementById('backtestBtn').addEventListener('click', async () => {
   const weeks = Object.keys(teamScoresCache).map(Number)
     .filter(w => Object.keys(teamScoresCache[w] || {}).length > 0).sort((a,b) => a-b);
   const variants = {
-    'Current: base × mult':   (b,m) => b * m,
-    'Divide: base ÷ mult':    (b,m) => b / m,
+    'Old formula: base × mult':   (b,m) => b * m,
+    'Live formula: base ÷ mult':    (b,m) => b / m,
     'Ignore mult: base':      (b,m) => b,
     'Divide twice: base ÷ mult²': (b,m) => b / (m*m)
   };
