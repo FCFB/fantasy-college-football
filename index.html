@@ -813,6 +813,13 @@ Miami, 41.05"></textarea>
       </fieldset>
 
       <fieldset>
+        <legend>Projection backtest</legend>
+        <p class="hint" style="margin-bottom:10px;">Replays past weeks: for each, projects every team using only earlier weeks, then compares to what they actually scored. Tests four ways of using the opponent multiplier.</p>
+        <button class="btn btn-outline" id="backtestBtn">Run backtest</button>
+        <div id="backtestOut" style="margin-top:12px;overflow-x:auto;"></div>
+      </fieldset>
+
+      <fieldset>
         <legend>Leagues interest</legend>
         <button class="btn btn-outline" id="leaguesCountBtn">Count sign-ups</button>
         <span class="hint" id="leaguesCountMsg"></span>
@@ -846,7 +853,7 @@ Miami, 41.05"></textarea>
       Firebase Console → Project settings → Your apps → SDK setup and config.
    ========================================================================= */
 const firebaseConfig = {
-    apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
+  apiKey: "AIzaSyC51oydwg4JxH51PuI4cgXNzymqliHTq74",
   authDomain: "fantasy-college-football.firebaseapp.com",
   projectId: "fantasy-college-football",
   storageBucket: "fantasy-college-football.firebasestorage.app",
@@ -2052,6 +2059,55 @@ document.getElementById('rebuildLbBtn').addEventListener('click', async () => {
     console.error('Could not rebuild leaderboard:', e);
     msg.textContent = 'Could not rebuild — check the console.';
   }
+});
+
+/* ---------- Projection backtest ---------- */
+document.getElementById('backtestBtn').addEventListener('click', async () => {
+  const out = document.getElementById('backtestOut');
+  out.textContent = 'Running…';
+  try { await Promise.all([loadTeamScores(true), loadSchedule(true)]); } catch (e) { out.textContent = 'Could not load data.'; return; }
+  const weeks = Object.keys(teamScoresCache).map(Number)
+    .filter(w => Object.keys(teamScoresCache[w] || {}).length > 0).sort((a,b) => a-b);
+  const variants = {
+    'Current: base × mult':   (b,m) => b * m,
+    'Divide: base ÷ mult':    (b,m) => b / m,
+    'Ignore mult: base':      (b,m) => b,
+    'Divide twice: base ÷ mult²': (b,m) => b / (m*m)
+  };
+  const stats = {};
+  Object.keys(variants).forEach(k => stats[k] = { absErr: 0, err: 0, n: 0, topSum: 0, topWeeks: 0 });
+  const weightForIndex = i => (i === 0 ? 5 : i === 1 ? 4 : i === 2 ? 3 : i === 3 ? 2 : 1);
+  let weeksUsed = 0;
+  weeks.forEach(w => {
+    const prior = weeks.filter(x => x < w).sort((a,b) => b - a); // most recent first
+    if (!prior.length) return;
+    const rows = [];
+    Object.keys(teamScoresCache[w]).forEach(team => {
+      const actual = teamScoresCache[w][team];
+      const bd = (teamBreakdownCache[w] || {})[team];
+      const m = bd && typeof bd.multiplier === 'number' ? bd.multiplier : 1;
+      let sum = 0, tot = 0, gi = 0; // gi = this team's Nth most recent game (byes don't count)
+      prior.forEach(pw => {
+        const v = (teamScoresCache[pw] || {})[team];
+        if (typeof v === 'number'){ const wt = weightForIndex(gi++); sum += v * wt; tot += wt; }
+      });
+      if (!tot) return;
+      rows.push({ team, actual, m, base: sum / tot });
+    });
+    if (rows.length < 10) return;
+    weeksUsed++;
+    Object.entries(variants).forEach(([name, fn]) => {
+      const st = stats[name];
+      rows.forEach(r => { const pr = fn(r.base, r.m); st.absErr += Math.abs(pr - r.actual); st.err += pr - r.actual; st.n++; });
+      const top5 = rows.slice().sort((a,b) => fn(b.base, b.m) - fn(a.base, a.m)).slice(0,5);
+      st.topSum += top5.reduce((t,r) => t + r.actual, 0); st.topWeeks++;
+    });
+  });
+  if (!weeksUsed){ out.textContent = 'Not enough scored weeks yet (need at least 2).'; return; }
+  const best = Object.entries(stats).sort((a,b) => b[1].topSum - a[1].topSum)[0][0];
+  out.innerHTML = `<table class="board"><thead><tr><th>Formula</th><th style="text-align:right;">Avg error</th><th style="text-align:right;">Bias</th><th style="text-align:right;">Top-5 avg pts/wk</th></tr></thead><tbody>` +
+    Object.entries(stats).map(([name, st]) => `<tr${name === best ? ' style="background:var(--chalk);font-weight:700;"' : ''}><td>${esc(name)}</td><td style="text-align:right;">${(st.absErr/st.n).toFixed(1)}</td><td style="text-align:right;">${(st.err/st.n).toFixed(1)}</td><td style="text-align:right;">${(st.topSum/st.topWeeks/5).toFixed(1)}</td></tr>`).join('') +
+    `</tbody></table><p class="hint" style="margin-top:8px;">${weeksUsed} week(s) tested. Avg error: lower is better. Bias: positive means it over-projects. Top-5: the actual average score of the five teams that formula ranked highest each week — the number that matters for picking. Small samples are noisy; rerun as the season goes on.</p>`;
 });
 
 /* ---------- Home: mode picker + Leagues waitlist ---------- */
